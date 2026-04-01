@@ -188,7 +188,7 @@ paths:
     get:
       operationId: getTrends
       tags: [trends]
-      summary: Get detected credit trend alerts
+      summary: Get detected credit trend alerts with multi-timeframe analysis
       parameters:
         - name: windowHours
           in: query
@@ -203,6 +203,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TrendAlertsResponse"
+
+  /trends/debug:
+    get:
+      operationId: getTrendsDebug
+      tags: [trends]
+      summary: Debug visibility into why trends are or are not being detected
+      responses:
+        "200":
+          description: Debug data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrendsDebug"
 
   /refresh:
     post:
@@ -515,7 +528,7 @@ components:
       properties:
         type:
           type: string
-          enum: [sector_cluster, issuer_deterioration, refinancing_wave, downgrade_wave]
+          enum: [sector_cluster, issuer_deterioration, refinancing_wave, downgrade_wave, emerging]
         sector:
           type: ["string", "null"]
         issuer:
@@ -530,7 +543,12 @@ components:
           type: integer
         severity:
           type: string
-          enum: [critical, high, moderate]
+          enum: [critical, high, moderate, watch]
+        trendScore:
+          type: integer
+        trendStrength:
+          type: string
+          enum: [increasing, stable, weakening]
       required:
         - type
         - signal
@@ -538,6 +556,24 @@ components:
         - implication
         - articleCount
         - severity
+        - trendScore
+        - trendStrength
+
+    FallbackNarrative:
+      type: object
+      properties:
+        summary:
+          type: string
+        sectorsToWatch:
+          type: array
+          items:
+            type: string
+        reasoning:
+          type: string
+      required:
+        - summary
+        - sectorsToWatch
+        - reasoning
 
     TrendAlertsResponse:
       type: object
@@ -546,14 +582,60 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TrendAlert"
+        hardAlerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrendAlert"
+        emergingAlerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrendAlert"
+        fallbackNarrative:
+          oneOf:
+            - $ref: "#/components/schemas/FallbackNarrative"
+            - type: "null"
         total:
           type: integer
         windowHours:
           type: integer
+        articlesAnalyzed:
+          type: integer
       required:
         - trendAlerts
+        - hardAlerts
+        - emergingAlerts
         - total
         - windowHours
+        - articlesAnalyzed
+
+    TrendsDebug:
+      type: object
+      properties:
+        articlesAnalyzed:
+          type: integer
+        articlesLast24h:
+          type: integer
+        articlesLast72h:
+          type: integer
+        sectorCounts:
+          type: object
+          additionalProperties:
+            type: integer
+        eventTypeCounts:
+          type: object
+          additionalProperties:
+            type: integer
+        negativeSentimentCounts:
+          type: object
+          additionalProperties:
+            type: integer
+      required:
+        - articlesAnalyzed
+        - articlesLast24h
+        - articlesLast72h
+        - sectorCounts
+        - eventTypeCounts
+        - negativeSentimentCounts
 
     SignalsResponse:
       type: object

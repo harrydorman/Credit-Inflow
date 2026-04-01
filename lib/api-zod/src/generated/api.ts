@@ -303,7 +303,7 @@ export const GetIssuerThesisResponse = zod.object({
 });
 
 /**
- * @summary Get detected credit trend alerts
+ * @summary Get detected credit trend alerts with multi-timeframe analysis
  */
 export const getTrendsQueryWindowHoursDefault = 72;
 
@@ -319,6 +319,7 @@ export const GetTrendsResponse = zod.object({
         "issuer_deterioration",
         "refinancing_wave",
         "downgrade_wave",
+        "emerging",
       ]),
       sector: zod.string().nullish(),
       issuer: zod.string().nullish(),
@@ -326,11 +327,76 @@ export const GetTrendsResponse = zod.object({
       evidence: zod.string(),
       implication: zod.string(),
       articleCount: zod.number(),
-      severity: zod.enum(["critical", "high", "moderate"]),
+      severity: zod.enum(["critical", "high", "moderate", "watch"]),
+      trendScore: zod.number(),
+      trendStrength: zod.enum(["increasing", "stable", "weakening"]),
     }),
   ),
+  hardAlerts: zod.array(
+    zod.object({
+      type: zod.enum([
+        "sector_cluster",
+        "issuer_deterioration",
+        "refinancing_wave",
+        "downgrade_wave",
+        "emerging",
+      ]),
+      sector: zod.string().nullish(),
+      issuer: zod.string().nullish(),
+      signal: zod.string(),
+      evidence: zod.string(),
+      implication: zod.string(),
+      articleCount: zod.number(),
+      severity: zod.enum(["critical", "high", "moderate", "watch"]),
+      trendScore: zod.number(),
+      trendStrength: zod.enum(["increasing", "stable", "weakening"]),
+    }),
+  ),
+  emergingAlerts: zod.array(
+    zod.object({
+      type: zod.enum([
+        "sector_cluster",
+        "issuer_deterioration",
+        "refinancing_wave",
+        "downgrade_wave",
+        "emerging",
+      ]),
+      sector: zod.string().nullish(),
+      issuer: zod.string().nullish(),
+      signal: zod.string(),
+      evidence: zod.string(),
+      implication: zod.string(),
+      articleCount: zod.number(),
+      severity: zod.enum(["critical", "high", "moderate", "watch"]),
+      trendScore: zod.number(),
+      trendStrength: zod.enum(["increasing", "stable", "weakening"]),
+    }),
+  ),
+  fallbackNarrative: zod
+    .union([
+      zod.object({
+        summary: zod.string(),
+        sectorsToWatch: zod.array(zod.string()),
+        reasoning: zod.string(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
   total: zod.number(),
   windowHours: zod.number(),
+  articlesAnalyzed: zod.number(),
+});
+
+/**
+ * @summary Debug visibility into why trends are or are not being detected
+ */
+export const GetTrendsDebugResponse = zod.object({
+  articlesAnalyzed: zod.number(),
+  articlesLast24h: zod.number(),
+  articlesLast72h: zod.number(),
+  sectorCounts: zod.record(zod.string(), zod.number()),
+  eventTypeCounts: zod.record(zod.string(), zod.number()),
+  negativeSentimentCounts: zod.record(zod.string(), zod.number()),
 });
 
 /**

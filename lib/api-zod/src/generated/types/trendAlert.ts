@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.3.0
  */
 import type { TrendAlertSeverity } from "./trendAlertSeverity";
+import type { TrendAlertTrendStrength } from "./trendAlertTrendStrength";
 import type { TrendAlertType } from "./trendAlertType";
 
 export interface TrendAlert {
@@ -19,4 +20,6 @@ export interface TrendAlert {
   implication: string;
   articleCount: number;
   severity: TrendAlertSeverity;
+  trendScore: number;
+  trendStrength: TrendAlertTrendStrength;
 }

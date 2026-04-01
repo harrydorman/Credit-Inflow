@@ -5,10 +5,15 @@
  * Credit Intelligence Dashboard API — Real-time credit risk detection and trade signal platform
  * OpenAPI spec version: 0.3.0
  */
+import type { FallbackNarrative } from "./fallbackNarrative";
 import type { TrendAlert } from "./trendAlert";
 
 export interface TrendAlertsResponse {
   trendAlerts: TrendAlert[];
+  hardAlerts: TrendAlert[];
+  emergingAlerts: TrendAlert[];
+  fallbackNarrative?: FallbackNarrative | null;
   total: number;
   windowHours: number;
+  articlesAnalyzed: number;
 }

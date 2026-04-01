@@ -29,6 +29,12 @@ const RSS_CREDIT_KEYWORDS = [
   "credit", "interest rate", "Federal Reserve", "Fed", "treasury", "loan",
   "refinancing", "maturity", "coupon", "covenant", "distressed",
   "investment grade", "speculative", "Moody", "Fitch", "S&P",
+  // Part 9: Expanded keyword list
+  "maturity wall", "liquidity crunch", "debt load", "leverage ratio",
+  "interest coverage", "restructuring", "amend and extend",
+  "near default", "debt restructuring", "distressed exchange",
+  "creditor", "chapter 11", "insolvency", "bankruptcy",
+  "credit spread", "CDS", "leveraged buyout", "LBO",
 ];
 
 // ── RSS Provider ──────────────────────────────────────────────────────────────

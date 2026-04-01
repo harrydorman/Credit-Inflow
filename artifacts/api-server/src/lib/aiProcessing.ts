@@ -1,4 +1,5 @@
 import { logger } from "./logger";
+import { normalizeEventType } from "./eventNormalization";
 
 const OPENAI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1";
@@ -16,18 +17,24 @@ const EVENT_TYPES = [
 ];
 
 // Noise reduction: minimum keyword score before sending to OpenAI
+// Expanded keyword list (Part 9)
 const NOISE_FILTER_KEYWORDS: Record<string, number> = {
   // High signal (3 points each)
   "covenant": 3, "default": 3, "bankruptcy": 3, "restructuring": 3,
-  "downgrade": 3, "distressed": 3, "chapter 11": 3,
+  "downgrade": 3, "distressed": 3, "chapter 11": 3, "distressed exchange": 3,
+  "creditor protection": 3, "insolvency": 3,
   // Medium signal (2 points each)
   "refinanc": 2, "maturity wall": 2, "liquidity": 2, "leverage": 2,
   "ccc": 2, "junk": 2, "high yield": 2, "leveraged loan": 2,
   "clo": 2, "credit rating": 2, "spread": 2, "yield": 2,
+  "liquidity crunch": 2, "debt load": 2, "leverage ratio": 2,
+  "interest coverage": 2, "debt restructuring": 2, "amend and extend": 2,
+  "maturity pressure": 2, "near default": 2, "debt maturity": 2,
   // Base signal (1 point each)
   "bond": 1, "debt": 1, "rating": 1, "credit": 1, "loan": 1,
   "interest rate": 1, "fed": 1, "treasury": 1, "moody": 1,
   "fitch": 1, "s&p": 1, "earnings": 1, "revenue miss": 1,
+  "downgraded": 1, "rating cut": 1, "cut to junk": 1, "weak earnings": 1,
 };
 const NOISE_FILTER_THRESHOLD = 2;
 
@@ -257,8 +264,11 @@ Respond ONLY with valid JSON (no markdown, no code blocks):
       ? (parsed.sentiment as "positive" | "negative" | "neutral")
       : "neutral";
 
-    const eventType = EVENT_TYPES.includes(parsed.eventType as string)
-      ? (parsed.eventType as string) : "other";
+    // Normalize the eventType (handles variants like "downgraded", "rating cut", etc.)
+    const rawEventType = parsed.eventType as string;
+    const normalizedEventType = normalizeEventType(rawEventType) ?? rawEventType;
+    const eventType = EVENT_TYPES.includes(normalizedEventType)
+      ? normalizedEventType : (EVENT_TYPES.includes(rawEventType) ? rawEventType : "other");
 
     const tradeImpl = (parsed.tradeImplication ?? {}) as Record<string, unknown>;
     const creditMetrics = (parsed.creditMetrics ?? {}) as Record<string, unknown>;

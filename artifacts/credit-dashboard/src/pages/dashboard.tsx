@@ -4,7 +4,7 @@ import { ArticleCard } from "@/components/article-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertTriangle, TrendingDown, TrendingUp, AlertCircle, FileText,
-  AlertOctagon, Filter, Zap, Activity, Shield, BarChart3
+  AlertOctagon, Filter, Zap, Activity, Shield, BarChart3, Eye, ArrowUp
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,32 +27,57 @@ function TrendAlertCard({ alert }: { alert: {
   type: string; sector?: string | null; issuer?: string | null;
   signal: string; evidence: string; implication: string;
   articleCount: number; severity: string;
+  trendScore?: number; trendStrength?: string;
 }}) {
   const severityStyles: Record<string, string> = {
     critical: "border-red-700/60 bg-red-950/30 text-red-400",
     high: "border-amber-700/60 bg-amber-950/20 text-amber-400",
     moderate: "border-border bg-card text-muted-foreground",
+    watch: "border-yellow-800/40 bg-yellow-950/10 text-yellow-500",
   };
   const typeIcons: Record<string, string> = {
     sector_cluster: "⚡",
     issuer_deterioration: "⬇",
     refinancing_wave: "↺",
     downgrade_wave: "▼",
+    emerging: "◎",
+  };
+  const strengthIcon: Record<string, string> = {
+    increasing: "↑",
+    stable: "→",
+    weakening: "↓",
+  };
+  const strengthColor: Record<string, string> = {
+    increasing: "text-red-400",
+    stable: "text-muted-foreground",
+    weakening: "text-emerald-500",
   };
 
   const styles = severityStyles[alert.severity] ?? severityStyles.moderate;
   return (
-    <div className={`p-3 rounded-lg border ${styles} text-xs space-y-1`}>
-      <div className="flex items-center justify-between">
-        <span className="font-bold font-mono uppercase tracking-wider">
+    <div className={`p-3 rounded-lg border ${styles} text-xs space-y-1.5`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-bold font-mono uppercase tracking-wider truncate">
           {typeIcons[alert.type] ?? "•"} {alert.type.replace(/_/g, " ")}
         </span>
-        <Badge variant="outline" className="text-[10px] font-mono">
-          {alert.articleCount} articles
-        </Badge>
+        <div className="flex items-center gap-1 shrink-0">
+          {alert.trendStrength && (
+            <span className={`font-mono text-[10px] font-bold ${strengthColor[alert.trendStrength] ?? ""}`}>
+              {strengthIcon[alert.trendStrength]} {alert.trendStrength.toUpperCase()}
+            </span>
+          )}
+          <Badge variant="outline" className="text-[10px] font-mono">
+            {alert.articleCount}x
+          </Badge>
+          {alert.trendScore !== undefined && (
+            <Badge variant="secondary" className="text-[10px] font-mono">
+              S:{alert.trendScore}
+            </Badge>
+          )}
+        </div>
       </div>
-      <p className="font-semibold">{alert.signal}</p>
-      <p className="opacity-80 leading-snug">{alert.implication}</p>
+      <p className="font-semibold leading-snug">{alert.signal}</p>
+      <p className="opacity-75 leading-snug text-[11px]">{alert.implication}</p>
     </div>
   );
 }
@@ -90,6 +115,13 @@ export default function Dashboard() {
         )
         .slice(0, 5)
     : [];
+
+  // Separate hardAlerts and emergingAlerts from the response
+  const hardAlerts = (trendsData as any)?.hardAlerts ?? trendsData?.trendAlerts?.filter((a: any) => a.type !== "emerging") ?? [];
+  const emergingAlerts = (trendsData as any)?.emergingAlerts ?? trendsData?.trendAlerts?.filter((a: any) => a.type === "emerging") ?? [];
+  const fallbackNarrative = (trendsData as any)?.fallbackNarrative ?? null;
+  const strengtheningAlerts = hardAlerts.filter((a: any) => a.trendStrength === "increasing");
+  const articlesAnalyzed = (trendsData as any)?.articlesAnalyzed ?? 0;
 
   return (
     <Layout>
@@ -231,25 +263,101 @@ export default function Dashboard() {
 
             {/* Trend Alerts Panel */}
             <div>
-              <h2 className="text-xl font-bold tracking-tight mb-4 flex items-center">
+              <h2 className="text-xl font-bold tracking-tight mb-1 flex items-center">
                 <Activity className="mr-2 h-5 w-5 text-amber-400" />
                 TREND ALERTS
-                <span className="ml-2 text-xs font-mono text-muted-foreground font-normal">72H WINDOW</span>
               </h2>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-xs font-mono text-muted-foreground">72H WINDOW</span>
+                {articlesAnalyzed > 0 && (
+                  <span className="text-xs font-mono text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">
+                    {articlesAnalyzed} articles analyzed
+                  </span>
+                )}
+              </div>
               {isLoadingTrends ? (
                 <div className="space-y-3">
                   <Skeleton className="h-20 w-full" />
                   <Skeleton className="h-20 w-full" />
                 </div>
-              ) : trendsData?.trendAlerts && trendsData.trendAlerts.length > 0 ? (
-                <div className="space-y-3">
-                  {trendsData.trendAlerts.slice(0, 4).map((alert, i) => (
-                    <TrendAlertCard key={i} alert={alert} />
-                  ))}
-                  {trendsData.trendAlerts.length > 4 && (
+              ) : hardAlerts.length > 0 || emergingAlerts.length > 0 ? (
+                <div className="space-y-4">
+                  {/* Hard Trends */}
+                  {hardAlerts.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Zap className="h-3 w-3 text-amber-400" />
+                        <span className="text-[10px] font-mono text-amber-400 uppercase tracking-widest">Confirmed Trends</span>
+                      </div>
+                      {hardAlerts.slice(0, 3).map((alert: any, i: number) => (
+                        <TrendAlertCard key={i} alert={alert} />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Strengthening Trends */}
+                  {strengtheningAlerts.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <ArrowUp className="h-3 w-3 text-red-400" />
+                        <span className="text-[10px] font-mono text-red-400 uppercase tracking-widest">Strengthening</span>
+                      </div>
+                      {strengtheningAlerts.map((alert: any, i: number) => (
+                        <div key={i} className="p-2 rounded-lg border border-red-900/40 bg-red-950/10 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-red-400">{alert.sector ?? alert.issuer}</span>
+                            <span className="font-mono text-[10px] text-red-400">↑ INCREASING</span>
+                          </div>
+                          <p className="text-muted-foreground mt-0.5 text-[11px] line-clamp-2">{alert.signal}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Emerging Risks */}
+                  {emergingAlerts.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Eye className="h-3 w-3 text-yellow-500" />
+                        <span className="text-[10px] font-mono text-yellow-500 uppercase tracking-widest">Emerging Risks</span>
+                      </div>
+                      {emergingAlerts.map((alert: any, i: number) => (
+                        <TrendAlertCard key={i} alert={alert} />
+                      ))}
+                    </div>
+                  )}
+
+                  {(trendsData?.trendAlerts?.length ?? 0) > 4 && (
                     <p className="text-xs font-mono text-muted-foreground text-center">
-                      +{trendsData.trendAlerts.length - 4} more trend alerts
+                      +{(trendsData?.trendAlerts?.length ?? 0) - 4} more trend signals
                     </p>
+                  )}
+                </div>
+              ) : fallbackNarrative ? (
+                /* Fallback narrative — never show empty */
+                <div className="space-y-3">
+                  <div className="p-3 rounded-lg border border-emerald-900/40 bg-emerald-950/10 text-xs space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Shield className="h-3 w-3 text-emerald-500" />
+                      <span className="font-mono text-emerald-500 uppercase tracking-wider text-[10px]">Market Status</span>
+                    </div>
+                    <p className="text-muted-foreground leading-relaxed">{fallbackNarrative.summary}</p>
+                  </div>
+                  {fallbackNarrative.sectorsToWatch.length > 0 && (
+                    <div className="p-3 rounded-lg border border-yellow-900/30 bg-yellow-950/10 text-xs space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Eye className="h-3 w-3 text-yellow-500" />
+                        <span className="font-mono text-yellow-500 uppercase tracking-wider text-[10px]">Sectors to Watch</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {fallbackNarrative.sectorsToWatch.map((sector: string, i: number) => (
+                          <Badge key={i} variant="outline" className="text-[10px] font-mono border-yellow-800/50 text-yellow-600">
+                            {sector}
+                          </Badge>
+                        ))}
+                      </div>
+                      <p className="text-muted-foreground text-[11px] leading-snug mt-1">{fallbackNarrative.reasoning}</p>
+                    </div>
                   )}
                 </div>
               ) : (

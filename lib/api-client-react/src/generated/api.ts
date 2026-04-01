@@ -29,6 +29,7 @@ import type {
   RefreshResult,
   SignalsResponse,
   TrendAlertsResponse,
+  TrendsDebug,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -610,7 +611,7 @@ export function useGetIssuerThesis<
 }
 
 /**
- * @summary Get detected credit trend alerts
+ * @summary Get detected credit trend alerts with multi-timeframe analysis
  */
 export const getGetTrendsUrl = (params?: GetTrendsParams) => {
   const normalizedParams = new URLSearchParams();
@@ -677,7 +678,7 @@ export type GetTrendsQueryResult = NonNullable<
 export type GetTrendsQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get detected credit trend alerts
+ * @summary Get detected credit trend alerts with multi-timeframe analysis
  */
 
 export function useGetTrends<
@@ -695,6 +696,81 @@ export function useGetTrends<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTrendsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Debug visibility into why trends are or are not being detected
+ */
+export const getGetTrendsDebugUrl = () => {
+  return `/api/trends/debug`;
+};
+
+export const getTrendsDebug = async (
+  options?: RequestInit,
+): Promise<TrendsDebug> => {
+  return customFetch<TrendsDebug>(getGetTrendsDebugUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTrendsDebugQueryKey = () => {
+  return [`/api/trends/debug`] as const;
+};
+
+export const getGetTrendsDebugQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTrendsDebug>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTrendsDebug>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTrendsDebugQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTrendsDebug>>> = ({
+    signal,
+  }) => getTrendsDebug({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTrendsDebug>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTrendsDebugQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTrendsDebug>>
+>;
+export type GetTrendsDebugQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Debug visibility into why trends are or are not being detected
+ */
+
+export function useGetTrendsDebug<
+  TData = Awaited<ReturnType<typeof getTrendsDebug>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTrendsDebug>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTrendsDebugQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -168,6 +168,7 @@ export const TrendAlertType = {
   issuer_deterioration: "issuer_deterioration",
   refinancing_wave: "refinancing_wave",
   downgrade_wave: "downgrade_wave",
+  emerging: "emerging",
 } as const;
 
 export type TrendAlertSeverity =
@@ -177,6 +178,16 @@ export const TrendAlertSeverity = {
   critical: "critical",
   high: "high",
   moderate: "moderate",
+  watch: "watch",
+} as const;
+
+export type TrendAlertTrendStrength =
+  (typeof TrendAlertTrendStrength)[keyof typeof TrendAlertTrendStrength];
+
+export const TrendAlertTrendStrength = {
+  increasing: "increasing",
+  stable: "stable",
+  weakening: "weakening",
 } as const;
 
 export interface TrendAlert {
@@ -190,12 +201,39 @@ export interface TrendAlert {
   implication: string;
   articleCount: number;
   severity: TrendAlertSeverity;
+  trendScore: number;
+  trendStrength: TrendAlertTrendStrength;
+}
+
+export interface FallbackNarrative {
+  summary: string;
+  sectorsToWatch: string[];
+  reasoning: string;
 }
 
 export interface TrendAlertsResponse {
   trendAlerts: TrendAlert[];
+  hardAlerts: TrendAlert[];
+  emergingAlerts: TrendAlert[];
+  fallbackNarrative?: FallbackNarrative | null;
   total: number;
   windowHours: number;
+  articlesAnalyzed: number;
+}
+
+export type TrendsDebugSectorCounts = { [key: string]: number };
+
+export type TrendsDebugEventTypeCounts = { [key: string]: number };
+
+export type TrendsDebugNegativeSentimentCounts = { [key: string]: number };
+
+export interface TrendsDebug {
+  articlesAnalyzed: number;
+  articlesLast24h: number;
+  articlesLast72h: number;
+  sectorCounts: TrendsDebugSectorCounts;
+  eventTypeCounts: TrendsDebugEventTypeCounts;
+  negativeSentimentCounts: TrendsDebugNegativeSentimentCounts;
 }
 
 export interface SignalsResponse {

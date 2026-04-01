@@ -13,4 +13,5 @@ export const TrendAlertSeverity = {
   critical: "critical",
   high: "high",
   moderate: "moderate",
+  watch: "watch",
 } as const;

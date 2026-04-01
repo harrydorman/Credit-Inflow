@@ -1,0 +1,246 @@
+You are an expert software engineer and credit markets specialist. You are upgrading an existing Credit Intelligence Dashboard MVP that already includes ingestion, AI processing, scoring, and a frontend dashboard.
+
+Your goal is to FIX and ENHANCE the trend detection system, improve signal quality, and ensure the system ALWAYS produces meaningful insights even with limited free data sources.
+
+DO NOT rewrite the system. Extend and improve the existing architecture.
+
+---
+
+## PART 1: DEBUG VISIBILITY (FIRST PRIORITY)
+
+Create a new endpoint:
+
+GET /api/trends/debug
+
+Return:
+
+{
+"articlesAnalyzed": number,
+"articlesLast24h": number,
+"articlesLast72h": number,
+"sectorCounts": { [sector: string]: number },
+"eventTypeCounts": { [eventType: string]: number },
+"negativeSentimentCounts": { [sector: string]: number }
+}
+
+Purpose:
+
+* Allow visibility into why trends are not being detected
+* Must be lightweight and fast
+
+---
+
+## PART 2: EVENT NORMALIZATION LAYER (CRITICAL)
+
+Create a normalization utility:
+
+/lib/eventNormalization.ts
+
+Implement mapping:
+
+const EVENT_MAP = {
+"downgraded": "downgrade",
+"rating cut": "downgrade",
+"cut to junk": "downgrade",
+"lowered rating": "downgrade",
+"missed earnings": "earnings_miss",
+"weak earnings": "earnings_miss",
+"liquidity concerns": "liquidity_stress",
+"refinancing pressure": "refinancing_risk",
+"default risk": "distress",
+"bankruptcy": "bankruptcy"
+};
+
+Export function:
+
+normalizeEventType(input: string): string
+
+Apply this normalization:
+
+* immediately after AI processing
+* before saving to database
+
+---
+
+## PART 3: LOOSEN TREND DETECTION THRESHOLDS
+
+Update trend detection logic:
+
+OLD (remove):
+
+* 3+ downgrades in 48h
+
+NEW RULES:
+
+Trigger trend if ANY of the following:
+
+1. 2+ negative events in same sector within 72 hours
+2. 3+ negative sentiment articles in same sector
+3. 2+ events for same issuer within 72 hours
+4. 2+ mentions of refinancing risk or liquidity stress in a sector
+
+Define "negative event":
+
+* sentiment = negative OR
+* creditSignalScore >= 2
+
+---
+
+## PART 4: SOFT TREND DETECTION (NEW FEATURE)
+
+Add new category: "emerging trends"
+
+Logic:
+
+If:
+
+* 2 negative articles in a sector (but not strong enough for hard trend)
+
+Then create:
+
+{
+"type": "emerging",
+"sector": string,
+"signal": "early stress indicators",
+"evidence": string,
+"implication": string
+}
+
+Example:
+
+"Early signs of stress emerging in Retail sector based on increased negative sentiment and refinancing concerns"
+
+---
+
+## PART 5: MULTI-TIMEFRAME ANALYSIS
+
+Instead of only 72h window, implement:
+
+* last 24h
+* last 72h
+* last 7 days
+
+For each trend:
+
+Add:
+
+"trendStrength": "increasing" | "stable" | "weakening"
+
+Logic:
+
+* more events in 24h vs 72h → increasing
+* flat → stable
+* declining → weakening
+
+---
+
+## PART 6: GUARANTEED OUTPUT LOGIC (VERY IMPORTANT)
+
+If NO hard trends detected:
+
+System MUST still return:
+
+{
+"fallbackNarrative": {
+"summary": string,
+"sectorsToWatch": string[],
+"reasoning": string
+}
+}
+
+Example:
+
+"No concentrated stress signals detected, but Healthcare and Retail show elevated negative sentiment. Monitor for further deterioration."
+
+This ensures the UI NEVER shows "no trends".
+
+---
+
+## PART 7: TREND SCORING SYSTEM
+
+Assign each trend a score:
+
+trendScore =
+(# negative events * 2)
+
+* (# urgencyScore >= 4)
+* (# CLO relevant articles)
+
+Sort trends descending by score.
+
+---
+
+## PART 8: FRONTEND IMPROVEMENTS
+
+Update dashboard:
+
+1. Replace "No Trends" with:
+
+   * Trend Alerts OR fallback narrative
+
+2. Add sections:
+
+A. "Top Credit Risks Today"
+
+* Top 5 sectors by aggregated creditSignalScore
+
+B. "Emerging Risks"
+
+* Soft trends
+
+C. "Strengthening Trends"
+
+* Based on multi-timeframe logic
+
+---
+
+## PART 9: INGESTION IMPROVEMENT (LOW COST, HIGH ROI)
+
+Expand keyword list to include:
+
+* "refinancing"
+* "maturity wall"
+* "liquidity crunch"
+* "debt load"
+* "leverage ratio"
+* "interest coverage"
+* "distressed"
+* "restructuring"
+
+Ensure ingestion captures more credit-relevant articles.
+
+---
+
+## PART 10: OUTPUT LANGUAGE UPGRADE
+
+Update trend generation prompt:
+
+Rules:
+
+* Be specific and technical
+* Mention:
+
+  * spread impact
+  * default risk direction
+  * CLO implications (if applicable)
+
+Avoid:
+
+* "may impact markets"
+
+Prefer:
+
+* "increases likelihood of spread widening in lower-rated cohorts"
+
+---
+
+FINAL GOAL:
+
+Ensure the system:
+
+* ALWAYS produces meaningful insights
+* Detects both strong and early-stage trends
+* Prioritizes signal over noise
+* Feels like a real credit desk intelligence tool
+
+The output should NEVER feel empty, even with limited data sources.

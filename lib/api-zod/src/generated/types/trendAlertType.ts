@@ -14,4 +14,5 @@ export const TrendAlertType = {
   issuer_deterioration: "issuer_deterioration",
   refinancing_wave: "refinancing_wave",
   downgrade_wave: "downgrade_wave",
+  emerging: "emerging",
 } as const;
