@@ -133,12 +133,16 @@ router.post("/refresh", async (req, res): Promise<void> => {
           forcedSellingRisk: analysis?.forcedSellingRisk ?? false,
           distressedRisk: analysis?.distressedRisk ?? false,
 
-          // Market validation (Parts 2-4)
+          // Market validation
           stockMove1D: marketValidation?.stockMove1D ?? null,
           stockMove5D: marketValidation?.stockMove5D ?? null,
           hyETFMove: marketValidation?.hyETFMove ?? null,
           marketValidationSignal: marketValidation?.validationSignal ?? null,
           confidenceScore: marketValidation?.confidenceScore ?? null,
+
+          // Structured AI outputs
+          creditSummaryJson: analysis?.creditSummary ?? null,
+          scoreExplanationJson: analysis?.scoreExplanation ?? null,
 
           processedAt: analysis ? new Date() : null,
         });

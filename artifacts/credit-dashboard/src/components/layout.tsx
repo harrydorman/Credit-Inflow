@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Activity, BarChart3, FileText, Home, RefreshCw, Zap, Building } from "lucide-react";
+import { Activity, BarChart3, FileText, Home, RefreshCw, Zap, Building, Layers, Newspaper } from "lucide-react";
 import { useTriggerRefresh } from "@workspace/api-client-react";
 import { Button } from "./ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -34,9 +34,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const navItems = [
-    { href: "/", label: "Dashboard", icon: Home },
+    { href: "/", label: "Market Overview", icon: Home },
+    { href: "/feed", label: "Live Feed", icon: Newspaper },
+    { href: "/sectors", label: "Sectors", icon: Layers },
     { href: "/issuers", label: "Issuers", icon: Building },
-    { href: "/signals", label: "Sector Signals", icon: Activity },
+    { href: "/signals", label: "Trend Signals", icon: Activity },
     { href: "/brief", label: "Daily Brief", icon: FileText },
   ];
 

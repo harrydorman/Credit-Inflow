@@ -6,7 +6,9 @@
  * OpenAPI spec version: 0.3.0
  */
 import type { ArticleConfidenceScore } from "./articleConfidenceScore";
+import type { ArticleCreditSummaryJson } from "./articleCreditSummaryJson";
 import type { ArticleMarketValidationSignal } from "./articleMarketValidationSignal";
+import type { ArticleScoreExplanationJson } from "./articleScoreExplanationJson";
 
 export interface Article {
   id: number;
@@ -100,6 +102,10 @@ export interface Article {
    * @nullable
    */
   confidenceScore?: ArticleConfidenceScore;
+  /** @nullable */
+  creditSummaryJson?: ArticleCreditSummaryJson;
+  /** @nullable */
+  scoreExplanationJson?: ArticleScoreExplanationJson;
   /** @nullable */
   processedAt?: Date | null;
   createdAt: Date;

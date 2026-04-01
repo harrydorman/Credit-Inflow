@@ -4,18 +4,22 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 
+import MarketOverview from "@/pages/market-overview";
 import Dashboard from "@/pages/dashboard";
 import ArticleDetail from "@/pages/article";
 import Signals from "@/pages/signals";
 import Brief from "@/pages/brief";
 import Issuers from "@/pages/issuers";
+import Sectors from "@/pages/sectors";
 
 const queryClient = new QueryClient();
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
+      <Route path="/" component={MarketOverview} />
+      <Route path="/feed" component={Dashboard} />
+      <Route path="/sectors" component={Sectors} />
       <Route path="/article/:id" component={ArticleDetail} />
       <Route path="/signals" component={Signals} />
       <Route path="/brief" component={Brief} />

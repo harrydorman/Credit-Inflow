@@ -158,26 +158,26 @@ export default function ArticleDetail() {
                 {article.title}
               </h1>
 
-              {/* Urgency Meter */}
+              {/* Quick score bar */}
               {(article.finalUrgencyScore ?? article.urgencyScore) && (
                 <div className="flex items-center gap-4 mb-4 p-3 bg-card/60 border border-border rounded-lg">
                   <div>
-                    <p className="text-[10px] font-mono text-muted-foreground mb-1">URGENCY SCORE</p>
+                    <p className="text-[10px] font-mono text-muted-foreground mb-1">CREDIT RISK SCORE</p>
                     <UrgencyMeter score={article.finalUrgencyScore ?? article.urgencyScore ?? 0} />
                   </div>
-                  {article.creditSignalScore != null && (
+                  {article.marketValidationSignal && (
                     <div className="border-l border-border pl-4">
-                      <p className="text-[10px] font-mono text-muted-foreground mb-1">CREDIT SIGNAL</p>
-                      <span className={`font-mono font-bold text-sm ${article.creditSignalScore >= 6 ? "text-red-400" : article.creditSignalScore >= 3 ? "text-amber-400" : "text-muted-foreground"}`}>
-                        {article.creditSignalScore > 0 ? "+" : ""}{article.creditSignalScore}
+                      <p className="text-[10px] font-mono text-muted-foreground mb-1">MARKET SIGNAL</p>
+                      <span className={`font-mono font-bold text-xs ${article.marketValidationSignal === "confirmed" ? "text-emerald-400" : article.marketValidationSignal === "mixed" ? "text-yellow-500" : "text-muted-foreground"}`}>
+                        {article.marketValidationSignal === "confirmed" ? "CONFIRMED" : article.marketValidationSignal === "mixed" ? "MIXED" : "WEAK"}
                       </span>
                     </div>
                   )}
-                  {article.marketImpact && (
+                  {article.cloRelevance && (
                     <div className="border-l border-border pl-4">
-                      <p className="text-[10px] font-mono text-muted-foreground mb-1">MKT IMPACT</p>
-                      <span className={`font-mono font-bold text-xs ${article.marketImpact === "high" ? "text-red-400" : article.marketImpact === "medium" ? "text-amber-400" : "text-emerald-400"}`}>
-                        {article.marketImpact.toUpperCase()}
+                      <p className="text-[10px] font-mono text-muted-foreground mb-1">CLO IMPACT</p>
+                      <span className={`font-mono font-bold text-xs ${article.cloRelevance === "high" ? "text-primary" : article.cloRelevance === "medium" ? "text-amber-400" : "text-muted-foreground"}`}>
+                        {article.cloRelevance.toUpperCase()}
                       </span>
                     </div>
                   )}
@@ -201,11 +201,151 @@ export default function ArticleDetail() {
             </header>
 
             <main className="space-y-8">
-              {article.summary && (
+              {/* Structured Credit Summary (new) */}
+              {article.creditSummaryJson ? (
+                <section>
+                  <h2 className="text-sm font-bold text-muted-foreground font-mono mb-3 flex items-center gap-2">
+                    <Target className="h-4 w-4" />
+                    CREDIT SUMMARY
+                  </h2>
+                  <div className="space-y-4">
+                    {article.creditSummaryJson.situation && (
+                      <div className="p-4 bg-card border border-border rounded-lg">
+                        <p className="text-[10px] font-mono text-muted-foreground mb-1">SITUATION</p>
+                        <p className="text-sm text-foreground leading-relaxed">{article.creditSummaryJson.situation}</p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {article.creditSummaryJson.creditDrivers && article.creditSummaryJson.creditDrivers.length > 0 && (
+                        <div className="p-4 bg-emerald-950/10 border border-emerald-800/30 rounded-lg">
+                          <p className="text-[10px] font-mono text-emerald-400 mb-2">CREDIT DRIVERS</p>
+                          <ul className="space-y-1.5">
+                            {article.creditSummaryJson.creditDrivers.map((d, i) => (
+                              <li key={i} className="flex items-start gap-2 text-xs text-foreground/90">
+                                <span className="text-emerald-500 font-mono mt-0.5">+</span> {d}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {article.creditSummaryJson.riskFactors && article.creditSummaryJson.riskFactors.length > 0 && (
+                        <div className="p-4 bg-red-950/10 border border-red-800/30 rounded-lg">
+                          <p className="text-[10px] font-mono text-red-400 mb-2">RISK FACTORS</p>
+                          <ul className="space-y-1.5">
+                            {article.creditSummaryJson.riskFactors.map((r, i) => (
+                              <li key={i} className="flex items-start gap-2 text-xs text-foreground/90">
+                                <span className="text-red-500 font-mono mt-0.5">−</span> {r}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                    {article.creditSummaryJson.keyMetricsMentioned && article.creditSummaryJson.keyMetricsMentioned.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        <span className="text-[10px] font-mono text-muted-foreground self-center">KEY METRICS:</span>
+                        {article.creditSummaryJson.keyMetricsMentioned.map((m, i) => (
+                          <Badge key={i} variant="outline" className="text-[10px] font-mono text-amber-400 border-amber-800/40 bg-amber-950/10">
+                            {m}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {article.creditSummaryJson.bottomLine && (
+                      <div className="p-3 border-l-4 border-primary bg-primary/5 rounded-r-lg">
+                        <p className="text-[10px] font-mono text-primary mb-1">BOTTOM LINE</p>
+                        <p className="text-sm font-semibold text-foreground">{article.creditSummaryJson.bottomLine}</p>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              ) : article.summary ? (
                 <section>
                   <h2 className="text-sm font-bold text-muted-foreground font-mono mb-3">AI SUMMARY</h2>
                   <div className="prose prose-invert max-w-none text-lg leading-relaxed text-foreground/90">
                     <p>{article.summary}</p>
+                  </div>
+                </section>
+              ) : null}
+
+              {/* Score Panel (new) */}
+              {(article.finalUrgencyScore != null || article.marketValidationSignal || article.cloRelevance) && (
+                <section>
+                  <h2 className="text-sm font-bold text-muted-foreground font-mono mb-3 flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4" />
+                    CREDIT SCORES
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {/* Credit Risk Score */}
+                    <div className={`p-4 rounded-lg border ${(article.finalUrgencyScore ?? 0) >= 7 ? "border-red-800/50 bg-red-950/20" : (article.finalUrgencyScore ?? 0) >= 5 ? "border-amber-800/40 bg-amber-950/10" : "border-border bg-card"}`}>
+                      <p className="text-[10px] font-mono text-muted-foreground mb-1">CREDIT RISK SCORE</p>
+                      <div className="flex items-center gap-2 mb-2">
+                        <UrgencyMeter score={article.finalUrgencyScore ?? article.urgencyScore ?? 0} />
+                      </div>
+                      {article.scoreExplanationJson?.creditRisk && (
+                        <p className="text-[10px] text-muted-foreground leading-relaxed border-t border-border pt-2 mt-2">
+                          {article.scoreExplanationJson.creditRisk}
+                        </p>
+                      )}
+                    </div>
+                    {/* Market Signal Strength */}
+                    <div className={`p-4 rounded-lg border ${article.marketValidationSignal === "confirmed" ? "border-emerald-800/40 bg-emerald-950/10" : article.marketValidationSignal === "mixed" ? "border-yellow-800/40 bg-yellow-950/10" : "border-border bg-card"}`}>
+                      <p className="text-[10px] font-mono text-muted-foreground mb-1">MARKET SIGNAL</p>
+                      <div className="flex items-center gap-2 mb-2">
+                        {article.marketValidationSignal === "confirmed" && <CheckCircle className="h-4 w-4 text-emerald-400" />}
+                        {article.marketValidationSignal === "mixed" && <AlertCircle className="h-4 w-4 text-yellow-500" />}
+                        {(!article.marketValidationSignal || article.marketValidationSignal === "unconfirmed") && <Minus className="h-4 w-4 text-muted-foreground" />}
+                        <span className={`font-bold font-mono text-sm ${article.marketValidationSignal === "confirmed" ? "text-emerald-400" : article.marketValidationSignal === "mixed" ? "text-yellow-500" : "text-muted-foreground"}`}>
+                          {article.marketValidationSignal === "confirmed" ? "CONFIRMED" : article.marketValidationSignal === "mixed" ? "MIXED" : "WEAK"}
+                        </span>
+                        {article.confidenceScore && (
+                          <Badge variant="outline" className={`text-[9px] font-mono ml-auto ${article.confidenceScore === "high" ? "text-emerald-400 border-emerald-800/40" : article.confidenceScore === "medium" ? "text-amber-400 border-amber-800/40" : "text-muted-foreground border-border"}`}>
+                            {article.confidenceScore.toUpperCase()} CONF
+                          </Badge>
+                        )}
+                      </div>
+                      {article.scoreExplanationJson?.marketSignal && (
+                        <p className="text-[10px] text-muted-foreground leading-relaxed border-t border-border pt-2 mt-2">
+                          {article.scoreExplanationJson.marketSignal}
+                        </p>
+                      )}
+                      <div className="flex gap-3 mt-2">
+                        {article.stockMove1D != null && (
+                          <div className="text-[9px] font-mono">
+                            <span className="text-muted-foreground">STOCK </span>
+                            <span className={article.stockMove1D < 0 ? "text-red-400" : "text-emerald-400"}>
+                              {article.stockMove1D > 0 ? "+" : ""}{article.stockMove1D.toFixed(2)}%
+                            </span>
+                          </div>
+                        )}
+                        {article.hyETFMove != null && (
+                          <div className="text-[9px] font-mono">
+                            <span className="text-muted-foreground">HYG </span>
+                            <span className={article.hyETFMove < 0 ? "text-red-400" : "text-emerald-400"}>
+                              {article.hyETFMove > 0 ? "+" : ""}{article.hyETFMove.toFixed(2)}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {/* CLO Impact Level */}
+                    <div className={`p-4 rounded-lg border ${article.cloRelevance === "high" ? "border-primary/40 bg-primary/5" : article.cloRelevance === "medium" ? "border-amber-800/40 bg-amber-950/10" : "border-border bg-card"}`}>
+                      <p className="text-[10px] font-mono text-muted-foreground mb-1">CLO IMPACT</p>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Activity className={`h-4 w-4 ${article.cloRelevance === "high" ? "text-primary" : article.cloRelevance === "medium" ? "text-amber-400" : "text-muted-foreground"}`} />
+                        <span className={`font-bold font-mono text-sm ${article.cloRelevance === "high" ? "text-primary" : article.cloRelevance === "medium" ? "text-amber-400" : "text-muted-foreground"}`}>
+                          {(article.cloRelevance ?? "LOW").toUpperCase()}
+                        </span>
+                        {article.cloCCCBucketRisk && (
+                          <Badge variant="outline" className="text-[9px] font-mono ml-auto text-red-400 border-red-800/40 animate-pulse">CCC ⚠</Badge>
+                        )}
+                      </div>
+                      {article.scoreExplanationJson?.cloImpact && (
+                        <p className="text-[10px] text-muted-foreground leading-relaxed border-t border-border pt-2 mt-2">
+                          {article.scoreExplanationJson.cloImpact}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </section>
               )}

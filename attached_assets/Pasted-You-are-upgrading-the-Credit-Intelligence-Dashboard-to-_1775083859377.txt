@@ -1,0 +1,140 @@
+You are upgrading the Credit Intelligence Dashboard to improve summary quality, simplify scoring, and completely restructure the frontend into a top-down credit analysis workflow.
+
+---
+
+## PART 1: SUMMARY UPGRADE
+
+Replace existing "summary" with structured output:
+
+creditSummary:
+
+* situation (string)
+* creditDrivers (array)
+* riskFactors (array)
+* keyMetricsMentioned (array)
+* bottomLine (string)
+
+Update OpenAI prompt:
+
+* Focus ONLY on credit-relevant details
+* Extract leverage, liquidity, refinancing, ratings
+* Avoid generic summaries
+
+---
+
+## PART 2: SIMPLIFY SCORING SYSTEM
+
+REMOVE:
+
+* creditSignalScore
+* trendScore
+* redundant scoring fields
+
+KEEP ONLY:
+
+1. creditRiskScore (0–10)
+2. marketSignalStrength:
+
+   * confirmed
+   * mixed
+   * weak
+3. cloImpactLevel:
+
+   * high
+   * medium
+   * low
+
+---
+
+## PART 3: SCORE EXPLANATIONS
+
+Add:
+
+scoreExplanation:
+
+* creditRisk (string)
+* marketSignal (string)
+* cloImpact (string)
+
+Each score MUST include reasoning.
+
+---
+
+## PART 4: MARKET OVERVIEW PAGE (NEW HOMEPAGE)
+
+Create new endpoint:
+
+GET /api/market-overview
+
+Return:
+
+{
+"macro": {
+"hyETF": number,
+"igETF": number,
+"marketDirection": string
+},
+"riskSummary": {
+"overallCondition": "stable" | "deteriorating",
+"negativeSignals": number,
+"downgrades": number
+},
+"topRisks": [
+{
+"sector": string,
+"reason": string
+}
+],
+"trendHighlights": []
+}
+
+---
+
+## PART 5: FRONTEND RESTRUCTURE
+
+Reorganize UI:
+
+1. Homepage = Market Overview
+2. Add Sector Page
+3. Keep Issuer Page
+4. Article view is last level
+
+Ensure:
+
+* clean hierarchy
+* minimal clutter
+* clear prioritization
+
+---
+
+## PART 6: DATA DISPLAY IMPROVEMENTS
+
+For each article display:
+
+* Credit Risk Score (with explanation)
+* Market Signal Strength (with explanation)
+* CLO Impact Level (with explanation)
+* Structured Summary (not paragraph)
+
+---
+
+## PART 7: DESIGN PRINCIPLES
+
+* Prioritize clarity over quantity
+* Show fewer, more meaningful metrics
+* Every number must be explainable
+* Avoid overwhelming the user
+
+---
+
+FINAL GOAL:
+
+Transform the platform into:
+
+"Top-down credit intelligence system"
+
+Where users can:
+
+* understand the market in seconds
+* identify risks quickly
+* drill down into detail when needed

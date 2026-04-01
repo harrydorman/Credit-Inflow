@@ -41,6 +41,26 @@ export const ArticleConfidenceScore = {
   low: "low",
 } as const;
 
+/**
+ * @nullable
+ */
+export type ArticleCreditSummaryJson = {
+  situation?: string;
+  creditDrivers?: string[];
+  riskFactors?: string[];
+  keyMetricsMentioned?: string[];
+  bottomLine?: string;
+} | null;
+
+/**
+ * @nullable
+ */
+export type ArticleScoreExplanationJson = {
+  creditRisk?: string;
+  marketSignal?: string;
+  cloImpact?: string;
+} | null;
+
 export interface Article {
   id: number;
   title: string;
@@ -133,6 +153,10 @@ export interface Article {
    * @nullable
    */
   confidenceScore?: ArticleConfidenceScore;
+  /** @nullable */
+  creditSummaryJson?: ArticleCreditSummaryJson;
+  /** @nullable */
+  scoreExplanationJson?: ArticleScoreExplanationJson;
   /** @nullable */
   processedAt?: string | null;
   createdAt: string;
@@ -335,6 +359,78 @@ export interface DailyBrief {
   covenantAlerts: DailyBriefItem[];
   criticalAlerts: DailyBriefItem[];
   totalArticlesProcessed: number;
+}
+
+export type MarketOverviewMacro = {
+  /** @nullable */
+  hyETF?: number | null;
+  /** @nullable */
+  igETF?: number | null;
+  marketDirection: string;
+  /** @nullable */
+  hyETFLastClose?: number | null;
+  /** @nullable */
+  lqdLastClose?: number | null;
+};
+
+export type MarketOverviewRiskSummaryOverallCondition =
+  (typeof MarketOverviewRiskSummaryOverallCondition)[keyof typeof MarketOverviewRiskSummaryOverallCondition];
+
+export const MarketOverviewRiskSummaryOverallCondition = {
+  stable: "stable",
+  deteriorating: "deteriorating",
+} as const;
+
+export type MarketOverviewRiskSummary = {
+  overallCondition: MarketOverviewRiskSummaryOverallCondition;
+  negativeSignals: number;
+  downgrades: number;
+  covenantFlags: number;
+  urgentArticles: number;
+  totalArticles72h: number;
+  processedArticles: number;
+};
+
+export type MarketOverviewTopRisksItem = {
+  sector: string;
+  negativeCount: number;
+  articleCount: number;
+  avgUrgency: number;
+  hasDowngrade: boolean;
+  hasCovenant: boolean;
+  reason: string;
+};
+
+export type MarketOverviewTrendHighlightsItem = {
+  type: string;
+  /** @nullable */
+  sector?: string | null;
+  /** @nullable */
+  issuer?: string | null;
+  signal: string;
+  severity: string;
+  trendStrength: string;
+};
+
+export type MarketOverviewSectorSignalsItem = {
+  sector: string;
+  totalArticles: number;
+  negativeCount: number;
+  avgUrgency: number;
+};
+
+export type MarketOverviewArticleCounts = {
+  last24h: number;
+  last72h: number;
+};
+
+export interface MarketOverview {
+  macro: MarketOverviewMacro;
+  riskSummary: MarketOverviewRiskSummary;
+  topRisks: MarketOverviewTopRisksItem[];
+  trendHighlights: MarketOverviewTrendHighlightsItem[];
+  sectorSignals: MarketOverviewSectorSignalsItem[];
+  articleCounts: MarketOverviewArticleCounts;
 }
 
 export interface RefreshResult {

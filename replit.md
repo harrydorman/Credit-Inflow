@@ -2,7 +2,17 @@
 
 ## Overview
 
-A full-stack Bloomberg-terminal-style web application for credit analysts, fixed income traders, CLO professionals, and portfolio managers. Aggregates financial news from RSS feeds, processes with OpenAI via Replit AI proxy, and presents structured credit intelligence with issuer tracking, covenant flags, urgency scoring, trend detection, and trade implications.
+A full-stack Bloomberg-terminal-style web application for credit analysts, fixed income traders, CLO professionals, and portfolio managers. Aggregates financial news from 17 RSS feeds, processes with OpenAI via Replit AI proxy, and presents structured credit intelligence as a top-down workflow: Market Overview → Sectors → Issuers → Articles.
+
+## Navigation Hierarchy (Part 5 restructure)
+
+- **`/`** — Market Overview (homepage): macro regime, risk summary, sector top risks, trend highlights
+- **`/feed`** — Live Feed: article stream with filters and trend sidebar
+- **`/sectors`** — Sector Analysis: clickable grid of all sectors, drills into article feed
+- **`/issuers`** — Issuer Intelligence: per-company risk tracking
+- **`/signals`** — Trend Signals: full trend detection alerts
+- **`/brief`** — Daily Brief: top-10 credit events summary
+- **`/article/:id`** — Article Detail: structured credit summary + scores with explanations
 
 ## Stack
 

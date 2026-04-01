@@ -144,8 +144,22 @@ export interface AIAnalysis {
 
   // Scores
   urgencyScore: number;       // AI 1-5
-  finalUrgencyScore: number;  // Hybrid 1-10
+  finalUrgencyScore: number;  // Hybrid 1-10 (= creditRiskScore)
   creditSignalScore: number;
+
+  // Structured outputs (new)
+  creditSummary: {
+    situation: string;
+    creditDrivers: string[];
+    riskFactors: string[];
+    keyMetricsMentioned: string[];
+    bottomLine: string;
+  } | null;
+  scoreExplanation: {
+    creditRisk: string;
+    marketSignal: string;
+    cloImpact: string;
+  } | null;
 }
 
 export async function analyzeArticle(
@@ -221,7 +235,21 @@ Respond ONLY with valid JSON (no markdown, no code blocks):
   },
 
   "marketImpact": "high | medium | low",
-  "urgencyScoreAI": 1-5 (5=covenant breach/bankruptcy, 4=downgrade/default risk, 3=spread widening/negative, 2=moderate, 1=informational)
+  "urgencyScoreAI": 1-5,
+
+  "creditSummary": {
+    "situation": "1-2 sentences: what is happening to this issuer/sector, with specific numbers if available",
+    "creditDrivers": ["primary credit driver 1", "primary credit driver 2"],
+    "riskFactors": ["downside risk 1", "downside risk 2"],
+    "keyMetricsMentioned": ["e.g. 'leverage 6.5x EBITDA'", "'CCC bucket at 8%'", "'$2.1B maturity in 2026'"],
+    "bottomLine": "1-sentence credit verdict: what a credit investor should do and why"
+  },
+
+  "scoreExplanation": {
+    "creditRisk": "why this credit risk score — cite specific event type, covenant status, or default proximity",
+    "marketSignal": "what market data or price action confirms/contradicts this credit thesis",
+    "cloImpact": "specific CLO implications: which WARF bucket, OC test pressure, or CCC % impact"
+  }
 }`;
 
   try {
@@ -235,7 +263,7 @@ Respond ONLY with valid JSON (no markdown, no code blocks):
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.15,
-        max_tokens: 1200,
+        max_tokens: 1600,
       }),
     });
 
@@ -366,6 +394,24 @@ Respond ONLY with valid JSON (no markdown, no code blocks):
       urgencyScore: aiScore,
       finalUrgencyScore,
       creditSignalScore,
+
+      // Structured outputs
+      creditSummary: parsed.creditSummary ? {
+        situation: (parsed.creditSummary as Record<string, unknown>).situation as string ?? "",
+        creditDrivers: Array.isArray((parsed.creditSummary as Record<string, unknown>).creditDrivers)
+          ? (parsed.creditSummary as Record<string, unknown>).creditDrivers as string[] : [],
+        riskFactors: Array.isArray((parsed.creditSummary as Record<string, unknown>).riskFactors)
+          ? (parsed.creditSummary as Record<string, unknown>).riskFactors as string[] : [],
+        keyMetricsMentioned: Array.isArray((parsed.creditSummary as Record<string, unknown>).keyMetricsMentioned)
+          ? (parsed.creditSummary as Record<string, unknown>).keyMetricsMentioned as string[] : [],
+        bottomLine: (parsed.creditSummary as Record<string, unknown>).bottomLine as string ?? "",
+      } : null,
+
+      scoreExplanation: parsed.scoreExplanation ? {
+        creditRisk: (parsed.scoreExplanation as Record<string, unknown>).creditRisk as string ?? "",
+        marketSignal: (parsed.scoreExplanation as Record<string, unknown>).marketSignal as string ?? "",
+        cloImpact: (parsed.scoreExplanation as Record<string, unknown>).cloImpact as string ?? "",
+      } : null,
     };
   } catch (err) {
     logger.error({ err }, "Error calling OpenAI API");

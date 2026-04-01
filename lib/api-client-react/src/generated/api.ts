@@ -26,6 +26,7 @@ import type {
   IssuerList,
   IssuerThesis,
   ListArticlesParams,
+  MarketOverview,
   RefreshResult,
   SignalsResponse,
   TrendAlertsResponse,
@@ -696,6 +697,81 @@ export function useGetTrends<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTrendsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get top-down market overview for homepage
+ */
+export const getGetMarketOverviewUrl = () => {
+  return `/api/market-overview`;
+};
+
+export const getMarketOverview = async (
+  options?: RequestInit,
+): Promise<MarketOverview> => {
+  return customFetch<MarketOverview>(getGetMarketOverviewUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMarketOverviewQueryKey = () => {
+  return [`/api/market-overview`] as const;
+};
+
+export const getGetMarketOverviewQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMarketOverview>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketOverview>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMarketOverviewQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMarketOverview>>
+  > = ({ signal }) => getMarketOverview({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketOverview>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMarketOverviewQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMarketOverview>>
+>;
+export type GetMarketOverviewQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get top-down market overview for homepage
+ */
+
+export function useGetMarketOverview<
+  TData = Awaited<ReturnType<typeof getMarketOverview>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketOverview>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMarketOverviewQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

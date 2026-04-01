@@ -204,6 +204,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/TrendAlertsResponse"
 
+  /market-overview:
+    get:
+      operationId: getMarketOverview
+      tags: [signals]
+      summary: Get top-down market overview for homepage
+      responses:
+        "200":
+          description: Market overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketOverview"
+
   /trends/debug:
     get:
       operationId: getTrendsDebug
@@ -367,6 +380,35 @@ components:
           type: ["string", "null"]
           enum: [high, medium, low, null]
           description: Combined AI signal strength + market confirmation
+        # Structured AI outputs
+        creditSummaryJson:
+          type: ["object", "null"]
+          properties:
+            situation:
+              type: string
+            creditDrivers:
+              type: array
+              items:
+                type: string
+            riskFactors:
+              type: array
+              items:
+                type: string
+            keyMetricsMentioned:
+              type: array
+              items:
+                type: string
+            bottomLine:
+              type: string
+        scoreExplanationJson:
+          type: ["object", "null"]
+          properties:
+            creditRisk:
+              type: string
+            marketSignal:
+              type: string
+            cloImpact:
+              type: string
         processedAt:
           type: ["string", "null"]
           format: date-time
@@ -754,6 +796,104 @@ components:
         - covenantAlerts
         - criticalAlerts
         - totalArticlesProcessed
+
+    MarketOverview:
+      type: object
+      properties:
+        macro:
+          type: object
+          properties:
+            hyETF:
+              type: ["number", "null"]
+            igETF:
+              type: ["number", "null"]
+            marketDirection:
+              type: string
+            hyETFLastClose:
+              type: ["number", "null"]
+            lqdLastClose:
+              type: ["number", "null"]
+          required: [marketDirection]
+        riskSummary:
+          type: object
+          properties:
+            overallCondition:
+              type: string
+              enum: [stable, deteriorating]
+            negativeSignals:
+              type: integer
+            downgrades:
+              type: integer
+            covenantFlags:
+              type: integer
+            urgentArticles:
+              type: integer
+            totalArticles72h:
+              type: integer
+            processedArticles:
+              type: integer
+          required: [overallCondition, negativeSignals, downgrades, covenantFlags, urgentArticles, totalArticles72h, processedArticles]
+        topRisks:
+          type: array
+          items:
+            type: object
+            properties:
+              sector:
+                type: string
+              negativeCount:
+                type: integer
+              articleCount:
+                type: integer
+              avgUrgency:
+                type: integer
+              hasDowngrade:
+                type: boolean
+              hasCovenant:
+                type: boolean
+              reason:
+                type: string
+            required: [sector, negativeCount, articleCount, avgUrgency, hasDowngrade, hasCovenant, reason]
+        trendHighlights:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              sector:
+                type: ["string", "null"]
+              issuer:
+                type: ["string", "null"]
+              signal:
+                type: string
+              severity:
+                type: string
+              trendStrength:
+                type: string
+            required: [type, signal, severity, trendStrength]
+        sectorSignals:
+          type: array
+          items:
+            type: object
+            properties:
+              sector:
+                type: string
+              totalArticles:
+                type: integer
+              negativeCount:
+                type: integer
+              avgUrgency:
+                type: number
+            required: [sector, totalArticles, negativeCount, avgUrgency]
+        articleCounts:
+          type: object
+          properties:
+            last24h:
+              type: integer
+            last72h:
+              type: integer
+          required: [last24h, last72h]
+      required: [macro, riskSummary, topRisks, trendHighlights, sectorSignals, articleCounts]
 
     RefreshResult:
       type: object

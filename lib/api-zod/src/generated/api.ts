@@ -106,6 +106,22 @@ export const ListArticlesResponse = zod.object({
         ])
         .nullish()
         .describe("Combined AI signal strength + market confirmation"),
+      creditSummaryJson: zod
+        .object({
+          situation: zod.string().optional(),
+          creditDrivers: zod.array(zod.string()).optional(),
+          riskFactors: zod.array(zod.string()).optional(),
+          keyMetricsMentioned: zod.array(zod.string()).optional(),
+          bottomLine: zod.string().optional(),
+        })
+        .nullish(),
+      scoreExplanationJson: zod
+        .object({
+          creditRisk: zod.string().optional(),
+          marketSignal: zod.string().optional(),
+          cloImpact: zod.string().optional(),
+        })
+        .nullish(),
       processedAt: zod.coerce.date().nullish(),
       createdAt: zod.coerce.date(),
     }),
@@ -186,6 +202,22 @@ export const GetArticleResponse = zod.object({
     ])
     .nullish()
     .describe("Combined AI signal strength + market confirmation"),
+  creditSummaryJson: zod
+    .object({
+      situation: zod.string().optional(),
+      creditDrivers: zod.array(zod.string()).optional(),
+      riskFactors: zod.array(zod.string()).optional(),
+      keyMetricsMentioned: zod.array(zod.string()).optional(),
+      bottomLine: zod.string().optional(),
+    })
+    .nullish(),
+  scoreExplanationJson: zod
+    .object({
+      creditRisk: zod.string().optional(),
+      marketSignal: zod.string().optional(),
+      cloImpact: zod.string().optional(),
+    })
+    .nullish(),
   processedAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
 });
@@ -437,6 +469,61 @@ export const GetTrendsResponse = zod.object({
   total: zod.number(),
   windowHours: zod.number(),
   articlesAnalyzed: zod.number(),
+});
+
+/**
+ * @summary Get top-down market overview for homepage
+ */
+export const GetMarketOverviewResponse = zod.object({
+  macro: zod.object({
+    hyETF: zod.number().nullish(),
+    igETF: zod.number().nullish(),
+    marketDirection: zod.string(),
+    hyETFLastClose: zod.number().nullish(),
+    lqdLastClose: zod.number().nullish(),
+  }),
+  riskSummary: zod.object({
+    overallCondition: zod.enum(["stable", "deteriorating"]),
+    negativeSignals: zod.number(),
+    downgrades: zod.number(),
+    covenantFlags: zod.number(),
+    urgentArticles: zod.number(),
+    totalArticles72h: zod.number(),
+    processedArticles: zod.number(),
+  }),
+  topRisks: zod.array(
+    zod.object({
+      sector: zod.string(),
+      negativeCount: zod.number(),
+      articleCount: zod.number(),
+      avgUrgency: zod.number(),
+      hasDowngrade: zod.boolean(),
+      hasCovenant: zod.boolean(),
+      reason: zod.string(),
+    }),
+  ),
+  trendHighlights: zod.array(
+    zod.object({
+      type: zod.string(),
+      sector: zod.string().nullish(),
+      issuer: zod.string().nullish(),
+      signal: zod.string(),
+      severity: zod.string(),
+      trendStrength: zod.string(),
+    }),
+  ),
+  sectorSignals: zod.array(
+    zod.object({
+      sector: zod.string(),
+      totalArticles: zod.number(),
+      negativeCount: zod.number(),
+      avgUrgency: zod.number(),
+    }),
+  ),
+  articleCounts: zod.object({
+    last24h: zod.number(),
+    last72h: zod.number(),
+  }),
 });
 
 /**
