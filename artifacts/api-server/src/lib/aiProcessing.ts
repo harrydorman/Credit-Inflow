@@ -1,6 +1,7 @@
 import { logger } from "./logger";
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
+const OPENAI_BASE_URL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1";
 
 const SECTORS = [
   "Retail",
@@ -85,7 +86,7 @@ export async function analyzeArticle(
   content: string | null
 ): Promise<AIAnalysis | null> {
   if (!OPENAI_API_KEY) {
-    logger.warn("OPENAI_API_KEY not set, skipping AI analysis");
+    logger.warn("No OpenAI API key configured, skipping AI analysis");
     return null;
   }
 
@@ -113,7 +114,7 @@ Respond with ONLY a valid JSON object (no markdown, no code blocks) with these e
 }`;
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

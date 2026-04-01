@@ -20,6 +20,33 @@ const CREDIT_KEYWORDS = [
   "bond yields",
 ];
 
+const RSS_CREDIT_KEYWORDS = [
+  ...CREDIT_KEYWORDS,
+  "bonds",
+  "yield",
+  "default",
+  "debt",
+  "rating",
+  "downgrade",
+  "spread",
+  "credit",
+  "interest rate",
+  "Federal Reserve",
+  "Fed",
+  "treasury",
+  "loan",
+  "refinancing",
+  "maturity",
+  "coupon",
+  "covenant",
+  "distressed",
+  "investment grade",
+  "speculative",
+  "Moody",
+  "Fitch",
+  "S&P",
+];
+
 export interface RawArticle {
   title: string;
   source: string;
@@ -88,16 +115,24 @@ export async function fetchNewsApiArticles(): Promise<RawArticle[]> {
 export async function fetchRssArticles(): Promise<RawArticle[]> {
   const RSS_FEEDS = [
     {
-      url: "https://feeds.bloomberg.com/markets/news.rss",
-      source: "Bloomberg",
+      url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+      source: "Wall Street Journal",
     },
     {
-      url: "https://www.ft.com/rss/home",
-      source: "Financial Times",
+      url: "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
+      source: "New York Times",
     },
     {
-      url: "https://feeds.reuters.com/reuters/businessNews",
-      source: "Reuters",
+      url: "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+      source: "MarketWatch",
+    },
+    {
+      url: "https://www.investing.com/rss/news_25.rss",
+      source: "Investing.com",
+    },
+    {
+      url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001147",
+      source: "CNBC",
     },
   ];
 
@@ -128,7 +163,7 @@ export async function fetchRssArticles(): Promise<RawArticle[]> {
 
         if (!title || !link) continue;
 
-        const isCreditRelated = CREDIT_KEYWORDS.some(
+        const isCreditRelated = RSS_CREDIT_KEYWORDS.some(
           (kw) =>
             title.toLowerCase().includes(kw.toLowerCase()) ||
             description.toLowerCase().includes(kw.toLowerCase())
