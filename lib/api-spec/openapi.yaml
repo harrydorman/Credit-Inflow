@@ -1,15 +1,20 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Credit Intelligence Dashboard API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: articles
+    description: News article operations
+  - name: signals
+    description: Credit signal aggregations
+  - name: ingestion
+    description: Data ingestion operations
 paths:
   /healthz:
     get:
@@ -24,6 +29,117 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /articles:
+    get:
+      operationId: listArticles
+      tags: [articles]
+      summary: List all processed articles
+      description: Returns all articles with optional filters
+      parameters:
+        - name: sector
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: eventType
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: sentiment
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of articles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleList"
+
+  /articles/{id}:
+    get:
+      operationId: getArticle
+      tags: [articles]
+      summary: Get article detail
+      description: Returns detailed article with AI analysis
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Article detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+        "404":
+          description: Article not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /signals:
+    get:
+      operationId: getSignals
+      tags: [signals]
+      summary: Get aggregated credit signals
+      description: Returns grouped insights by sector and event type
+      responses:
+        "200":
+          description: Aggregated signals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignalsResponse"
+
+  /signals/daily-brief:
+    get:
+      operationId: getDailyBrief
+      tags: [signals]
+      summary: Get daily credit brief
+      description: Returns top insights for the day - most negative events, impacted sectors, key trends
+      responses:
+        "200":
+          description: Daily credit brief
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyBrief"
+
+  /refresh:
+    post:
+      operationId: triggerRefresh
+      tags: [ingestion]
+      summary: Trigger data ingestion
+      description: Fetches new articles from news sources and processes them with AI
+      responses:
+        "200":
+          description: Refresh result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResult"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +150,200 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Article:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        source:
+          type: string
+        publishedAt:
+          type: string
+          format: date-time
+        url:
+          type: string
+        rawContent:
+          type: ["string", "null"]
+        summary:
+          type: ["string", "null"]
+        sector:
+          type: ["string", "null"]
+        eventType:
+          type: ["string", "null"]
+        sentiment:
+          type: ["string", "null"]
+        whyItMatters:
+          type: ["string", "null"]
+        whoCares:
+          type: ["string", "null"]
+        cloImpact:
+          type: boolean
+        processedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - source
+        - publishedAt
+        - url
+        - cloImpact
+        - createdAt
+
+    ArticleList:
+      type: object
+      properties:
+        articles:
+          type: array
+          items:
+            $ref: "#/components/schemas/Article"
+        total:
+          type: integer
+      required:
+        - articles
+        - total
+
+    SectorSignal:
+      type: object
+      properties:
+        sector:
+          type: string
+        totalArticles:
+          type: integer
+        negativeCount:
+          type: integer
+        eventTypes:
+          type: array
+          items:
+            type: string
+        riskScore:
+          type: number
+      required:
+        - sector
+        - totalArticles
+        - negativeCount
+        - eventTypes
+        - riskScore
+
+    EventTypeSignal:
+      type: object
+      properties:
+        eventType:
+          type: string
+        count:
+          type: integer
+        negativeCount:
+          type: integer
+        sectors:
+          type: array
+          items:
+            type: string
+      required:
+        - eventType
+        - count
+        - negativeCount
+        - sectors
+
+    SignalsResponse:
+      type: object
+      properties:
+        bySector:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectorSignal"
+        byEventType:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventTypeSignal"
+        totalArticles:
+          type: integer
+        lastUpdated:
+          type: ["string", "null"]
+          format: date-time
+      required:
+        - bySector
+        - byEventType
+        - totalArticles
+
+    DailyBriefItem:
+      type: object
+      properties:
+        articleId:
+          type: integer
+        title:
+          type: string
+        summary:
+          type: ["string", "null"]
+        sector:
+          type: ["string", "null"]
+        sentiment:
+          type: ["string", "null"]
+        eventType:
+          type: ["string", "null"]
+      required:
+        - articleId
+        - title
+
+    DailyBrief:
+      type: object
+      properties:
+        date:
+          type: string
+        mostNegativeEvents:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyBriefItem"
+        mostImpactedSectors:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectorSignal"
+        keyTrends:
+          type: array
+          items:
+            type: string
+        cloAlerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyBriefItem"
+        totalArticlesProcessed:
+          type: integer
+      required:
+        - date
+        - mostNegativeEvents
+        - mostImpactedSectors
+        - keyTrends
+        - cloAlerts
+        - totalArticlesProcessed
+
+    RefreshResult:
+      type: object
+      properties:
+        fetched:
+          type: integer
+        processed:
+          type: integer
+        duplicatesSkipped:
+          type: integer
+        errors:
+          type: integer
+        message:
+          type: string
+      required:
+        - fetched
+        - processed
+        - duplicatesSkipped
+        - errors
+        - message
