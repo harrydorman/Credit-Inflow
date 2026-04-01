@@ -1,12 +1,10 @@
 import { useListIssuers } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertOctagon, Building, BarChart2 } from "lucide-react";
+import { Building, TrendingDown, TrendingUp, Minus } from "lucide-react";
 import { useLocation } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { formatDistanceToNow } from "date-fns";
 
 export default function Issuers() {
@@ -14,13 +12,19 @@ export default function Issuers() {
   const [, setLocation] = useLocation();
 
   const getUrgencyProps = (score: number) => {
-    switch(score) {
-      case 5: return { label: "CRITICAL", color: "bg-red-600 text-white border-red-600" };
-      case 4: return { label: "HIGH", color: "bg-orange-500 text-white border-orange-500" };
-      case 3: return { label: "ELEVATED", color: "bg-amber-500 text-black border-amber-500" };
-      case 2: return { label: "MOD", color: "bg-blue-500 text-white border-blue-500" };
-      case 1: return { label: "INFO", color: "bg-gray-500 text-white border-gray-500" };
-      default: return { label: "-", color: "bg-transparent text-muted-foreground border-border" };
+    if (score >= 8) return { label: `${score}/10`, color: "bg-red-600 text-white border-red-600" };
+    if (score >= 6) return { label: `${score}/10`, color: "bg-orange-500 text-white border-orange-500" };
+    if (score >= 4) return { label: `${score}/10`, color: "bg-amber-500 text-black border-amber-500" };
+    if (score >= 2) return { label: `${score}/10`, color: "bg-blue-500 text-white border-blue-500" };
+    if (score >= 1) return { label: `${score}/10`, color: "bg-gray-500 text-white border-gray-500" };
+    return { label: "-", color: "bg-transparent text-muted-foreground border-border" };
+  };
+
+  const getRiskTrendIcon = (trend: string) => {
+    switch (trend) {
+      case "deteriorating": return <TrendingDown className="h-3.5 w-3.5 text-red-400" />;
+      case "improving": return <TrendingUp className="h-3.5 w-3.5 text-green-400" />;
+      default: return <Minus className="h-3.5 w-3.5 text-muted-foreground" />;
     }
   };
 
@@ -65,6 +69,7 @@ export default function Issuers() {
                   <TableHead className="font-mono text-xs text-center">NEG / TOTAL</TableHead>
                   <TableHead className="font-mono text-xs">RATING</TableHead>
                   <TableHead className="font-mono text-xs">LATEST SIGNAL</TableHead>
+                  <TableHead className="font-mono text-xs text-center">TREND</TableHead>
                   <TableHead className="font-mono text-xs text-right">RISK SCORE</TableHead>
                 </TableRow>
               </TableHeader>
@@ -119,6 +124,14 @@ export default function Issuers() {
                       </TableCell>
                       <TableCell className="text-xs font-mono text-muted-foreground">
                         {formatDistanceToNow(new Date(issuer.latestArticleDate), { addSuffix: true })}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {getRiskTrendIcon(issuer.riskTrend)}
+                          <span className={`font-mono text-[10px] ${issuer.riskTrend === "deteriorating" ? "text-red-400" : issuer.riskTrend === "improving" ? "text-green-400" : "text-muted-foreground"}`}>
+                            {issuer.riskTrend.toUpperCase().slice(0, 5)}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">

@@ -102,17 +102,20 @@ router.get("/signals/daily-brief", async (_req, res): Promise<void> => {
     eventType: a.eventType,
     issuerName: a.issuerName,
     urgencyScore: a.urgencyScore,
+    finalUrgencyScore: a.finalUrgencyScore,
     covenantFlag: a.covenantFlag,
     ratingMentioned: a.ratingMentioned,
     ratingAgency: a.ratingAgency,
     marketImpact: a.marketImpact,
+    tradeDirection: a.tradeDirection,
+    spreadWideningRisk: a.spreadWideningRisk,
   });
 
-  // Most negative events sorted by urgency then date
+  // Most negative events sorted by finalUrgencyScore (1-10) then date
   const negativeArticles = articles
     .filter((a) => a.sentiment === "negative")
     .sort((a, b) => {
-      const urgDiff = (b.urgencyScore ?? 0) - (a.urgencyScore ?? 0);
+      const urgDiff = (b.finalUrgencyScore ?? b.urgencyScore ?? 0) - (a.finalUrgencyScore ?? a.urgencyScore ?? 0);
       if (urgDiff !== 0) return urgDiff;
       return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
     })

@@ -5,9 +5,7 @@
  * Credit Intelligence Dashboard API — Real-time credit risk detection and trade signal platform
  * OpenAPI spec version: 0.3.0
  */
-import type { Article } from "./article";
 
-export interface ArticleList {
-  articles: Article[];
-  total: number;
-}
+export type GetTrendsParams = {
+  windowHours?: number;
+};

@@ -4,65 +4,86 @@ const OPENAI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env
 const OPENAI_BASE_URL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1";
 
 const SECTORS = [
-  "Retail",
-  "Technology",
-  "Energy",
-  "Healthcare",
-  "Real Estate",
-  "Financial Services",
-  "Consumer Discretionary",
-  "Industrials",
-  "Materials",
-  "Utilities",
-  "Telecom",
-  "Media",
-  "Transportation",
-  "Gaming",
-  "Other",
+  "Retail", "Technology", "Energy", "Healthcare", "Real Estate",
+  "Financial Services", "Consumer Discretionary", "Industrials", "Materials",
+  "Utilities", "Telecom", "Media", "Transportation", "Gaming", "Other",
 ];
 
 const EVENT_TYPES = [
-  "downgrade",
-  "earnings",
-  "default risk",
-  "refinancing",
-  "M&A",
-  "macro",
-  "bankruptcy",
-  "debt issuance",
-  "spread widening",
-  "rating action",
-  "restructuring",
-  "covenant breach",
-  "other",
+  "downgrade", "earnings", "default risk", "refinancing", "M&A", "macro",
+  "bankruptcy", "debt issuance", "spread widening", "rating action",
+  "restructuring", "covenant breach", "other",
 ];
 
-// Urgency scoring matrix based on event type + sentiment
-// 5 = Critical (requires immediate attention)
-// 4 = High (monitor closely today)
-// 3 = Elevated (worth watching)
-// 2 = Moderate (informational with some credit relevance)
-// 1 = Low (general market color)
-function computeUrgency(
+// Noise reduction: minimum keyword score before sending to OpenAI
+const NOISE_FILTER_KEYWORDS: Record<string, number> = {
+  // High signal (3 points each)
+  "covenant": 3, "default": 3, "bankruptcy": 3, "restructuring": 3,
+  "downgrade": 3, "distressed": 3, "chapter 11": 3,
+  // Medium signal (2 points each)
+  "refinanc": 2, "maturity wall": 2, "liquidity": 2, "leverage": 2,
+  "ccc": 2, "junk": 2, "high yield": 2, "leveraged loan": 2,
+  "clo": 2, "credit rating": 2, "spread": 2, "yield": 2,
+  // Base signal (1 point each)
+  "bond": 1, "debt": 1, "rating": 1, "credit": 1, "loan": 1,
+  "interest rate": 1, "fed": 1, "treasury": 1, "moody": 1,
+  "fitch": 1, "s&p": 1, "earnings": 1, "revenue miss": 1,
+};
+const NOISE_FILTER_THRESHOLD = 2;
+
+export function passesNoiseFilter(title: string, content: string | null): boolean {
+  const text = `${title} ${content ?? ""}`.toLowerCase();
+  let score = 0;
+  for (const [kw, pts] of Object.entries(NOISE_FILTER_KEYWORDS)) {
+    if (text.includes(kw)) score += pts;
+    if (score >= NOISE_FILTER_THRESHOLD) return true;
+  }
+  return false;
+}
+
+// ── Hybrid urgency scoring ────────────────────────────────────────────────────
+function computeFinalUrgencyScore(
+  aiScore: number,
   eventType: string,
   sentiment: string,
-  covenantFlag: boolean
+  covenantFlag: boolean,
+  ratingIsCCC: boolean,
+  liquidityConcern: boolean,
+  refinancingRisk: boolean,
+  earningsMiss: boolean,
+  leverageMentioned: boolean,
+  distressedRisk: boolean,
 ): number {
-  if (covenantFlag && sentiment === "negative") return 5;
-  if (eventType === "bankruptcy" && sentiment === "negative") return 5;
-  if (eventType === "covenant breach") return 5;
-  if (eventType === "default risk" && sentiment === "negative") return 4;
-  if (eventType === "downgrade" && sentiment === "negative") return 4;
-  if (eventType === "rating action" && sentiment === "negative") return 4;
-  if (eventType === "restructuring" && sentiment === "negative") return 4;
-  if (eventType === "spread widening" && sentiment === "negative") return 3;
-  if (eventType === "debt issuance" && sentiment === "negative") return 3;
-  if (sentiment === "negative") return 3;
-  if (eventType === "M&A") return 2;
-  if (eventType === "refinancing") return 2;
-  if (eventType === "earnings") return 2;
-  if (sentiment === "neutral") return 2;
-  return 1;
+  let score = aiScore;
+  if (eventType === "bankruptcy" || eventType === "restructuring") score += 5;
+  if (ratingIsCCC) score += 3;
+  if (covenantFlag) score += 3;
+  if (liquidityConcern || refinancingRisk) score += 2;
+  if (earningsMiss && leverageMentioned) score += 2;
+  if (sentiment === "negative") score += 1;
+  if (distressedRisk) score += 1;
+  return Math.min(10, score);
+}
+
+// ── Credit signal score ───────────────────────────────────────────────────────
+function computeCreditSignalScore(
+  eventType: string,
+  covenantFlag: boolean,
+  refinancingRisk: boolean,
+  liquidityConcern: boolean,
+  distressedRisk: boolean,
+  ratingIsDowngrade: boolean,
+  sentiment: string,
+): number {
+  let score = 0;
+  if (ratingIsDowngrade) score += 3;
+  if (covenantFlag) score += 3;
+  if (refinancingRisk) score += 2;
+  if (liquidityConcern) score += 2;
+  if (distressedRisk) score += 2;
+  if (eventType === "downgrade" || eventType === "rating action") score += 2;
+  if (sentiment === "positive") score -= 1;
+  return score;
 }
 
 export interface AIAnalysis {
@@ -71,14 +92,53 @@ export interface AIAnalysis {
   eventType: string;
   sentiment: "positive" | "negative" | "neutral";
   whyItMatters: string;
-  whoCares: string;
-  cloImpact: boolean;
+  whoCares: string[];
   issuerName: string | null;
-  covenantFlag: boolean;
+
+  // Trade
+  tradeDirection: "positive" | "negative" | "neutral";
+  tradeRationale: string;
+  potentialTrades: string[];
+  marketsImpacted: string[];
+
+  // Credit metrics
+  leverageMentioned: boolean;
+  liquidityConcern: boolean;
+  refinancingRisk: boolean;
+  earningsMiss: boolean;
+
+  // Rating
   ratingMentioned: string | null;
   ratingAgency: string | null;
+  ratingIsDowngrade: boolean;
+  ratingIsUpgrade: boolean;
+  ratingIsCCCThreshold: boolean;
+
+  // Covenant
+  covenantFlag: boolean;
+  covenantType: string | null;
+
+  // CLO
+  cloImpact: boolean;
+  cloRelevance: "high" | "medium" | "low";
+  cloImpactTypes: string[];
+  cloWarfImpact: "increase" | "decrease" | "neutral";
+  cloCCCBucketRisk: boolean;
+  cloLoanVsBond: "loan" | "bond" | "mixed";
+  cloExplanation: string;
+
+  // Market technical
+  spreadWideningRisk: boolean;
+  forcedSellingRisk: boolean;
+  distressedRisk: boolean;
+
+  // Market impact
   marketImpact: "high" | "medium" | "low";
-  urgencyScore: number;
+
+  // Scores
+  urgencyScore: number;       // AI 1-5
+  finalUrgencyScore: number;  // Hybrid 1-10
+  creditSignalScore: number;
 }
 
 export async function analyzeArticle(
@@ -92,25 +152,69 @@ export async function analyzeArticle(
 
   const articleText = [title, content].filter(Boolean).join("\n\n");
 
-  const prompt = `You are a senior credit analyst with 30 years of fixed income trading experience. Analyze this financial news article with the precision a credit desk demands.
+  const prompt = `You are a senior credit portfolio manager with 20+ years trading high yield bonds and leveraged loans. You have deep expertise in CLO structuring, covenant analysis, and distressed credit.
+
+Analyze this financial article with the precision required at a credit desk. Be highly technical and specific. Quantify risk where possible. Avoid vague language like "may impact markets" — instead say "increases likelihood of spread widening in B/CCC cohort by 50-75bps" or "triggers CCC bucket breach risk for leveraged loan CLOs."
 
 Article:
-${articleText.slice(0, 3000)}
+${articleText.slice(0, 3500)}
 
-Respond with ONLY a valid JSON object (no markdown, no code blocks) with these exact fields:
+Respond ONLY with valid JSON (no markdown, no code blocks):
 {
-  "summary": "3-5 sentence summary focused on credit implications — mention specific spreads, ratings, or debt metrics if present in the article",
+  "summary": "3-5 sentence credit-focused summary. Mention specific spreads, ratings, leverage multiples, or debt metrics if present. State credit implications explicitly.",
   "sector": "one of: ${SECTORS.join(", ")}",
   "eventType": "one of: ${EVENT_TYPES.join(", ")}",
-  "sentiment": "one of: positive, negative, neutral (strictly from a credit/bond investor perspective — positive = credit improving, negative = credit deteriorating)",
-  "whyItMatters": "2-3 sentences explaining implications for: (1) credit risk, (2) bond spreads or CDS, (3) specific holders like CLO managers or HY funds",
-  "whoCares": "comma-separated list from: Credit Analysts, Fixed Income Traders, Portfolio Managers, CLO Managers, Risk Officers, Distressed Debt Investors",
-  "cloImpact": true or false (true if article relates to leveraged loans, CLO market, ratings changes affecting CLOs, structured credit, or loan pricing),
-  "issuerName": "the specific company/issuer being discussed (e.g. 'Ford Motor Credit', 'Dish Network', 'Altice USA') — null if article is purely macro with no single issuer focus",
-  "covenantFlag": true or false (true if article mentions: covenant breach, covenant waiver, covenant amendment, PIK toggle, springing covenant, restricted payments, cure rights, or any distressed credit amendment),
-  "ratingMentioned": "the specific credit rating mentioned in the article if any, e.g. 'B2', 'BB+', 'Caa1', 'CCC+' — null if no specific rating mentioned",
-  "ratingAgency": "one of: Moody's, S&P, Fitch — null if no rating agency action mentioned",
-  "marketImpact": "one of: high, medium, low — your assessment of likely market impact on credit spreads"
+  "sentiment": "positive | negative | neutral (strictly from a bondholder/credit investor perspective)",
+  "whyItMatters": "2-3 sentences on: (1) default risk trajectory, (2) spread/CDS impact, (3) structural credit implications for CLO managers or HY funds",
+
+  "tradeImplication": {
+    "direction": "positive | negative | neutral",
+    "marketsImpacted": ["e.g. HY bonds", "leveraged loans", "CDS", "CLO equity"],
+    "rationale": "specific credit rationale for market movement",
+    "potentialTrades": ["e.g. 'Short CDS protection on B-rated issuer', 'Sell BB/B loans ahead of downgrade', 'Buy HY ETF puts']"
+  },
+
+  "whoCares": ["Credit Analysts", "Fixed Income Traders", "Portfolio Managers", "CLO Managers", "Risk Officers", "Distressed Debt Investors"],
+
+  "issuerName": "specific company/issuer or null for pure macro",
+
+  "creditMetrics": {
+    "leverageMentioned": true/false,
+    "liquidityConcern": true/false,
+    "refinancingRisk": true/false,
+    "earningsMiss": true/false
+  },
+
+  "ratingAnalysis": {
+    "ratingMentioned": "e.g. B2, BB+, CCC or null",
+    "ratingAgency": "Moody's | S&P | Fitch | null",
+    "isDowngrade": true/false,
+    "isUpgrade": true/false,
+    "isCCCThreshold": true/false
+  },
+
+  "covenantAnalysis": {
+    "covenantFlag": true/false,
+    "covenantType": "e.g. 'financial maintenance covenant', 'restricted payments', 'PIK toggle', 'cure right exercised' or null"
+  },
+
+  "cloAnalysis": {
+    "relevance": "high | medium | low",
+    "impactType": ["e.g. 'CCC bucket pressure', 'WARF deterioration', 'OC test breach risk', 'par value loss'],
+    "warfImpact": "increase | decrease | neutral",
+    "cccBucketRisk": true/false,
+    "loanVsBond": "loan | bond | mixed",
+    "explanation": "1-2 sentences on specific CLO structural implications. Name specific CLO metrics affected (WARF, OC ratio, CCC bucket %)"
+  },
+
+  "marketTechnicalSignals": {
+    "spreadWideningRisk": true/false,
+    "forcedSellingRisk": true/false,
+    "distressedRisk": true/false
+  },
+
+  "marketImpact": "high | medium | low",
+  "urgencyScoreAI": 1-5 (5=covenant breach/bankruptcy, 4=downgrade/default risk, 3=spread widening/negative, 2=moderate, 1=informational)
 }`;
 
   try {
@@ -123,8 +227,8 @@ Respond with ONLY a valid JSON object (no markdown, no code blocks) with these e
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
-        temperature: 0.2,
-        max_tokens: 800,
+        temperature: 0.15,
+        max_tokens: 1200,
       }),
     });
 
@@ -139,64 +243,119 @@ Respond with ONLY a valid JSON object (no markdown, no code blocks) with these e
     };
 
     const raw = data.choices?.[0]?.message?.content?.trim() ?? "";
-
     const jsonStr = raw
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/```\s*$/, "")
-      .trim();
+      .replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/, "").trim();
 
-    const parsed = JSON.parse(jsonStr) as Partial<AIAnalysis>;
+    const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
 
-    if (
-      !parsed.summary ||
-      !parsed.sector ||
-      !parsed.eventType ||
-      !parsed.sentiment
-    ) {
+    if (!parsed.summary || !parsed.sector || !parsed.eventType || !parsed.sentiment) {
       logger.warn({ parsed }, "AI response missing required fields");
       return null;
     }
 
-    const sentiment = ["positive", "negative", "neutral"].includes(
-      parsed.sentiment as string
-    )
+    const sentiment = ["positive", "negative", "neutral"].includes(parsed.sentiment as string)
       ? (parsed.sentiment as "positive" | "negative" | "neutral")
       : "neutral";
 
     const eventType = EVENT_TYPES.includes(parsed.eventType as string)
-      ? (parsed.eventType as string)
-      : "other";
+      ? (parsed.eventType as string) : "other";
 
-    const covenantFlag = Boolean(parsed.covenantFlag);
+    const tradeImpl = (parsed.tradeImplication ?? {}) as Record<string, unknown>;
+    const creditMetrics = (parsed.creditMetrics ?? {}) as Record<string, unknown>;
+    const ratingAnalysis = (parsed.ratingAnalysis ?? {}) as Record<string, unknown>;
+    const covenantAnalysis = (parsed.covenantAnalysis ?? {}) as Record<string, unknown>;
+    const cloAnalysis = (parsed.cloAnalysis ?? {}) as Record<string, unknown>;
+    const marketTech = (parsed.marketTechnicalSignals ?? {}) as Record<string, unknown>;
 
-    const marketImpact = ["high", "medium", "low"].includes(
-      parsed.marketImpact as string
-    )
-      ? (parsed.marketImpact as "high" | "medium" | "low")
-      : "medium";
+    const covenantFlag = Boolean(covenantAnalysis.covenantFlag);
+    const ratingIsCCC = Boolean(ratingAnalysis.isCCCThreshold);
+    const liquidityConcern = Boolean(creditMetrics.liquidityConcern);
+    const refinancingRisk = Boolean(creditMetrics.refinancingRisk);
+    const earningsMiss = Boolean(creditMetrics.earningsMiss);
+    const leverageMentioned = Boolean(creditMetrics.leverageMentioned);
+    const distressedRisk = Boolean(marketTech.distressedRisk);
+    const ratingIsDowngrade = Boolean(ratingAnalysis.isDowngrade);
+
+    const aiScore = Math.min(5, Math.max(1, Number(parsed.urgencyScoreAI) || 2));
+    const finalUrgencyScore = computeFinalUrgencyScore(
+      aiScore, eventType, sentiment, covenantFlag, ratingIsCCC,
+      liquidityConcern, refinancingRisk, earningsMiss, leverageMentioned, distressedRisk,
+    );
+    const creditSignalScore = computeCreditSignalScore(
+      eventType, covenantFlag, refinancingRisk, liquidityConcern,
+      distressedRisk, ratingIsDowngrade, sentiment,
+    );
+
+    const cloRelevanceRaw = cloAnalysis.relevance as string;
+    const cloRelevance = ["high", "medium", "low"].includes(cloRelevanceRaw)
+      ? (cloRelevanceRaw as "high" | "medium" | "low") : "low";
+
+    const cloWarfRaw = (cloAnalysis.warfImpact ?? cloAnalysis.warFImpact) as string;
+    const cloWarfImpact = ["increase", "decrease", "neutral"].includes(cloWarfRaw)
+      ? (cloWarfRaw as "increase" | "decrease" | "neutral") : "neutral";
+
+    const cloLoanVsBondRaw = cloAnalysis.loanVsBond as string;
+    const cloLoanVsBond = ["loan", "bond", "mixed"].includes(cloLoanVsBondRaw)
+      ? (cloLoanVsBondRaw as "loan" | "bond" | "mixed") : "mixed";
+
+    const marketImpactRaw = parsed.marketImpact as string;
+    const marketImpact = ["high", "medium", "low"].includes(marketImpactRaw)
+      ? (marketImpactRaw as "high" | "medium" | "low") : "medium";
+
+    const tradeDirectionRaw = tradeImpl.direction as string;
+    const tradeDirection = ["positive", "negative", "neutral"].includes(tradeDirectionRaw)
+      ? (tradeDirectionRaw as "positive" | "negative" | "neutral") : "neutral";
+
+    const whoCares = Array.isArray(parsed.whoCares)
+      ? (parsed.whoCares as string[])
+      : typeof parsed.whoCares === "string"
+        ? (parsed.whoCares as string).split(",").map((s: string) => s.trim())
+        : [];
 
     return {
       summary: parsed.summary as string,
-      sector: SECTORS.includes(parsed.sector as string)
-        ? (parsed.sector as string)
-        : "Other",
+      sector: SECTORS.includes(parsed.sector as string) ? (parsed.sector as string) : "Other",
       eventType,
       sentiment,
       whyItMatters: (parsed.whyItMatters as string) ?? "",
-      whoCares: (parsed.whoCares as string) ?? "",
-      cloImpact: Boolean(parsed.cloImpact),
-      issuerName:
-        typeof parsed.issuerName === "string" ? parsed.issuerName : null,
+      whoCares,
+      issuerName: typeof parsed.issuerName === "string" ? parsed.issuerName : null,
+
+      tradeDirection,
+      tradeRationale: (tradeImpl.rationale as string) ?? "",
+      potentialTrades: Array.isArray(tradeImpl.potentialTrades) ? (tradeImpl.potentialTrades as string[]) : [],
+      marketsImpacted: Array.isArray(tradeImpl.marketsImpacted) ? (tradeImpl.marketsImpacted as string[]) : [],
+
+      leverageMentioned,
+      liquidityConcern,
+      refinancingRisk,
+      earningsMiss,
+
+      ratingMentioned: typeof ratingAnalysis.ratingMentioned === "string" ? ratingAnalysis.ratingMentioned : null,
+      ratingAgency: typeof ratingAnalysis.ratingAgency === "string" ? ratingAnalysis.ratingAgency : null,
+      ratingIsDowngrade,
+      ratingIsUpgrade: Boolean(ratingAnalysis.isUpgrade),
+      ratingIsCCCThreshold: ratingIsCCC,
+
       covenantFlag,
-      ratingMentioned:
-        typeof parsed.ratingMentioned === "string"
-          ? parsed.ratingMentioned
-          : null,
-      ratingAgency:
-        typeof parsed.ratingAgency === "string" ? parsed.ratingAgency : null,
+      covenantType: typeof covenantAnalysis.covenantType === "string" ? covenantAnalysis.covenantType : null,
+
+      cloImpact: cloRelevance === "high" || cloRelevance === "medium",
+      cloRelevance,
+      cloImpactTypes: Array.isArray(cloAnalysis.impactType) ? (cloAnalysis.impactType as string[]) : [],
+      cloWarfImpact,
+      cloCCCBucketRisk: Boolean(cloAnalysis.cccBucketRisk),
+      cloLoanVsBond,
+      cloExplanation: (cloAnalysis.explanation as string) ?? "",
+
+      spreadWideningRisk: Boolean(marketTech.spreadWideningRisk),
+      forcedSellingRisk: Boolean(marketTech.forcedSellingRisk),
+      distressedRisk,
+
       marketImpact,
-      urgencyScore: computeUrgency(eventType, sentiment, covenantFlag),
+      urgencyScore: aiScore,
+      finalUrgencyScore,
+      creditSignalScore,
     };
   } catch (err) {
     logger.error({ err }, "Error calling OpenAI API");

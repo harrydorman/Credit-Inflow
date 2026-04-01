@@ -4,6 +4,8 @@ import articlesRouter from "./articles";
 import signalsRouter from "./signals";
 import issuersRouter from "./issuers";
 import ingestionRouter from "./ingestion";
+import trendsRouter from "./trends";
+import issuerThesisRouter from "./issuerThesis";
 
 const router: IRouter = Router();
 
@@ -12,5 +14,7 @@ router.use(articlesRouter);
 router.use(signalsRouter);
 router.use(issuersRouter);
 router.use(ingestionRouter);
+router.use(trendsRouter);
+router.use(issuerThesisRouter);
 
 export default router;

@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: Api
-  version: 0.2.0
-  description: Credit Intelligence Dashboard API
+  version: 0.3.0
+  description: Credit Intelligence Dashboard API — Real-time credit risk detection and trade signal platform
 servers:
   - url: /api
     description: Base API path
@@ -15,6 +15,8 @@ tags:
     description: Credit signal aggregations
   - name: issuers
     description: Issuer-level intelligence
+  - name: trends
+    description: Trend detection and cluster analysis
   - name: ingestion
     description: Data ingestion operations
 paths:
@@ -148,7 +150,7 @@ paths:
       operationId: listIssuers
       tags: [issuers]
       summary: Get issuer-level credit intelligence
-      description: Returns aggregated risk data per company/issuer — the view traders actually need
+      description: Returns aggregated risk data per company/issuer including risk trajectory
       responses:
         "200":
           description: Issuer signals
@@ -156,6 +158,51 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/IssuerList"
+
+  /issuer-thesis/{issuer}:
+    get:
+      operationId: getIssuerThesis
+      tags: [issuers]
+      summary: Get AI-generated credit thesis for an issuer
+      parameters:
+        - name: issuer
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Credit thesis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuerThesis"
+        "404":
+          description: No data for issuer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /trends:
+    get:
+      operationId: getTrends
+      tags: [trends]
+      summary: Get detected credit trend alerts
+      parameters:
+        - name: windowHours
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 72
+      responses:
+        "200":
+          description: Trend alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrendAlertsResponse"
 
   /refresh:
     post:
@@ -230,6 +277,65 @@ components:
           type: ["string", "null"]
         marketImpact:
           type: ["string", "null"]
+        # Phase 2 scoring
+        finalUrgencyScore:
+          type: ["integer", "null"]
+        creditSignalScore:
+          type: ["integer", "null"]
+        # Trade implication
+        tradeDirection:
+          type: ["string", "null"]
+        tradeRationale:
+          type: ["string", "null"]
+        potentialTrades:
+          type: ["array", "null"]
+          items:
+            type: string
+        marketsImpacted:
+          type: ["array", "null"]
+          items:
+            type: string
+        # Credit metrics
+        leverageMentioned:
+          type: boolean
+        liquidityConcern:
+          type: boolean
+        refinancingRisk:
+          type: boolean
+        earningsMiss:
+          type: boolean
+        # Rating detail
+        ratingIsDowngrade:
+          type: boolean
+        ratingIsUpgrade:
+          type: boolean
+        ratingIsCCCThreshold:
+          type: boolean
+        # Covenant detail
+        covenantType:
+          type: ["string", "null"]
+        # CLO analysis
+        cloRelevance:
+          type: ["string", "null"]
+        cloLoanVsBond:
+          type: ["string", "null"]
+        cloWarfImpact:
+          type: ["string", "null"]
+        cloCCCBucketRisk:
+          type: boolean
+        cloExplanation:
+          type: ["string", "null"]
+        cloImpactTypes:
+          type: ["array", "null"]
+          items:
+            type: string
+        # Market technical signals
+        spreadWideningRisk:
+          type: boolean
+        forcedSellingRisk:
+          type: boolean
+        distressedRisk:
+          type: boolean
         processedAt:
           type: ["string", "null"]
           format: date-time
@@ -244,6 +350,17 @@ components:
         - url
         - cloImpact
         - covenantFlag
+        - leverageMentioned
+        - liquidityConcern
+        - refinancingRisk
+        - earningsMiss
+        - ratingIsDowngrade
+        - ratingIsUpgrade
+        - ratingIsCCCThreshold
+        - cloCCCBucketRisk
+        - spreadWideningRisk
+        - forcedSellingRisk
+        - distressedRisk
         - createdAt
 
     ArticleList:
@@ -274,6 +391,8 @@ components:
             type: string
         riskScore:
           type: number
+        creditSignalScore:
+          type: integer
       required:
         - sector
         - totalArticles
@@ -330,6 +449,11 @@ components:
           format: date-time
         riskScore:
           type: number
+        riskTrend:
+          type: string
+          enum: [improving, stable, deteriorating]
+        creditSignalTotal:
+          type: integer
       required:
         - issuerName
         - totalArticles
@@ -339,6 +463,8 @@ components:
         - eventTypes
         - latestArticleDate
         - riskScore
+        - riskTrend
+        - creditSignalTotal
 
     IssuerList:
       type: object
@@ -352,6 +478,82 @@ components:
       required:
         - issuers
         - total
+
+    IssuerThesis:
+      type: object
+      properties:
+        issuer:
+          type: string
+        creditView:
+          type: string
+          enum: [positive, negative, neutral]
+        summary:
+          type: string
+        keyDrivers:
+          type: array
+          items:
+            type: string
+        risks:
+          type: array
+          items:
+            type: string
+        potentialOutlook:
+          type: string
+        articleCount:
+          type: integer
+      required:
+        - issuer
+        - creditView
+        - summary
+        - keyDrivers
+        - risks
+        - potentialOutlook
+        - articleCount
+
+    TrendAlert:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [sector_cluster, issuer_deterioration, refinancing_wave, downgrade_wave]
+        sector:
+          type: ["string", "null"]
+        issuer:
+          type: ["string", "null"]
+        signal:
+          type: string
+        evidence:
+          type: string
+        implication:
+          type: string
+        articleCount:
+          type: integer
+        severity:
+          type: string
+          enum: [critical, high, moderate]
+      required:
+        - type
+        - signal
+        - evidence
+        - implication
+        - articleCount
+        - severity
+
+    TrendAlertsResponse:
+      type: object
+      properties:
+        trendAlerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrendAlert"
+        total:
+          type: integer
+        windowHours:
+          type: integer
+      required:
+        - trendAlerts
+        - total
+        - windowHours
 
     SignalsResponse:
       type: object
@@ -393,6 +595,8 @@ components:
           type: ["string", "null"]
         urgencyScore:
           type: ["integer", "null"]
+        finalUrgencyScore:
+          type: ["integer", "null"]
         covenantFlag:
           type: boolean
         ratingMentioned:
@@ -401,6 +605,10 @@ components:
           type: ["string", "null"]
         marketImpact:
           type: ["string", "null"]
+        tradeDirection:
+          type: ["string", "null"]
+        spreadWideningRisk:
+          type: boolean
       required:
         - articleId
         - title

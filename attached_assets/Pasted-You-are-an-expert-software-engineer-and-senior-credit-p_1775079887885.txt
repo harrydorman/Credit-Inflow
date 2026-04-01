@@ -1,0 +1,289 @@
+You are an expert software engineer and senior credit portfolio manager. You are upgrading an existing MVP called "Credit Intelligence Dashboard" into a decision-support system for credit analysts, CLO managers, and fixed income traders.
+
+The current system already:
+
+* Ingests news via RSS
+* Processes articles with OpenAI into structured fields
+* Stores in PostgreSQL
+* Displays via React dashboard
+
+Your job is to SIGNIFICANTLY UPGRADE the intelligence layer, scoring system, CLO analysis, and signal detection while keeping the current architecture intact.
+
+IMPORTANT CONSTRAINTS:
+
+* Continue using FREE data sources (RSS, NewsAPI if available)
+* DO NOT introduce paid APIs yet
+* Design all new logic to be modular so premium data sources (Bloomberg, Creditflux, WSJ) can be swapped in later without major refactoring
+
+---
+
+## PART 1: ENHANCE AI OUTPUT SCHEMA (CRITICAL)
+
+Modify the AI processing layer to return the following expanded JSON schema:
+
+{
+"summary": string,
+"sector": string,
+"eventType": string,
+"sentiment": "positive" | "negative" | "neutral",
+
+"whyItMatters": string,
+
+"tradeImplication": {
+"direction": "positive" | "negative" | "neutral",
+"marketsImpacted": string[],
+"rationale": string,
+"potentialTrades": string[]
+},
+
+"whoCares": string[],
+
+"issuerName": string,
+
+"creditMetrics": {
+"leverageMentioned": boolean,
+"liquidityConcern": boolean,
+"refinancingRisk": boolean,
+"earningsMiss": boolean
+},
+
+"ratingAnalysis": {
+"ratingMentioned": string | null,
+"ratingAgency": string | null,
+"isDowngrade": boolean,
+"isUpgrade": boolean,
+"isCCCThreshold": boolean
+},
+
+"covenantAnalysis": {
+"covenantFlag": boolean,
+"covenantType": string | null
+},
+
+"cloAnalysis": {
+"relevance": "high" | "medium" | "low",
+"impactType": string[],
+"warFImpact": "increase" | "decrease" | "neutral",
+"cccBucketRisk": boolean,
+"loanVsBond": "loan" | "bond" | "mixed",
+"explanation": string
+},
+
+"marketTechnicalSignals": {
+"spreadWideningRisk": boolean,
+"forcedSellingRisk": boolean,
+"distressedRisk": boolean
+},
+
+"urgencyScoreAI": number (1-5)
+}
+
+Update the OpenAI prompt to:
+
+* Think like a senior credit PM
+* Focus on default risk, spread impact, and CLO implications
+* Avoid generic language
+* Be highly specific and technical
+
+---
+
+## PART 2: HYBRID URGENCY SCORING SYSTEM
+
+Create a new computed field: finalUrgencyScore
+
+Formula:
+finalUrgencyScore = urgencyScoreAI + ruleAdjustments
+
+Add rule-based adjustments:
+
++5 → bankruptcy, restructuring
++3 → downgrade to CCC or below
++3 → covenant breach
++2 → liquidity crisis or refinancing risk
++2 → earnings miss + leverage concern
++1 → general negative sentiment
+
+Cap score at 10.
+
+Store BOTH:
+
+* urgencyScoreAI
+* finalUrgencyScore
+
+---
+
+## PART 3: CREDIT SIGNAL SCORING SYSTEM
+
+Create a new "creditSignalScore" per article:
+
++3 → downgrade (especially HY → CCC)
++3 → covenant breach
++2 → refinancing risk
++2 → liquidity stress
++2 → distressed language
+-1 → positive credit event
+
+Use this to rank articles globally.
+
+---
+
+## PART 4: TREND DETECTION ENGINE
+
+Build a new service:
+
+/services/trendDetection.ts
+
+Logic:
+
+* Look at last 48–72 hours of articles
+* Group by sector and issuer
+* Identify clusters:
+
+Examples:
+
+* 3+ downgrades in same sector
+* multiple negative events for same issuer
+* repeated refinancing risk mentions
+
+Output:
+
+{
+"trendAlerts": [
+{
+"sector": string,
+"signal": string,
+"evidence": string,
+"implication": string
+}
+]
+}
+
+Expose via:
+GET /api/trends
+
+---
+
+## PART 5: ISSUER RISK TRAJECTORY
+
+Enhance issuer aggregation:
+
+Add:
+
+* riskTrend: "improving" | "stable" | "deteriorating"
+
+Logic:
+
+* Increasing urgency scores over time → deteriorating
+* More negative sentiment → deteriorating
+
+---
+
+## PART 6: NOISE REDUCTION FILTER
+
+Before sending to OpenAI:
+
+Only process articles if they contain:
+
+* rating actions
+* leverage / liquidity language
+* refinancing / maturity wall
+* distress / default signals
+
+Implement keyword scoring threshold.
+
+---
+
+## PART 7: FRONTEND UPGRADES
+
+Add a NEW top section on dashboard:
+
+"Top Credit Risks Today"
+
+Display:
+
+* top 5 sectors by creditSignalScore
+* key events driving risk
+
+Add:
+
+* Trend Alerts panel
+* Trade Implications section in article view
+* CLO Impact visualization (badges or tags)
+
+---
+
+## PART 8: CREDIT THESIS GENERATOR
+
+Create new endpoint:
+
+GET /api/issuer-thesis/:issuer
+
+Output:
+
+{
+"creditView": "positive" | "negative" | "neutral",
+"summary": string,
+"keyDrivers": string[],
+"risks": string[],
+"potentialOutlook": string
+}
+
+Generate using aggregated article data + OpenAI.
+
+---
+
+## PART 9: FUTURE DATA ARCHITECTURE (IMPORTANT)
+
+Abstract data ingestion:
+
+Create interface:
+
+DataSourceProvider {
+fetchArticles(): Article[]
+}
+
+Implement:
+
+* RSSProvider (current)
+* NewsAPIProvider (optional)
+
+Design so future providers can be added:
+
+* BloombergProvider
+* CreditfluxProvider
+
+WITHOUT changing downstream logic.
+
+---
+
+## PART 10: OUTPUT QUALITY IMPROVEMENT
+
+Update AI prompt instructions:
+
+* Always quantify risk when possible
+* Explicitly mention:
+
+  * spread impact
+  * default probability direction
+  * CLO structural implications
+* Avoid vague statements like "may impact markets"
+* Prefer:
+  "increases likelihood of spread widening in B/CCC cohort"
+
+---
+
+FINAL GOAL:
+
+Transform the system from:
+"news summarization tool"
+
+into:
+"real-time credit risk detection and trade signal platform"
+
+Prioritize:
+
+* actionable insights
+* signal over noise
+* structured credit intelligence
+
+Keep code modular, clean, and production-ready for future data upgrades.
