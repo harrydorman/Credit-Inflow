@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Credit Intelligence Dashboard API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
@@ -22,6 +22,7 @@ import type {
   DailyBrief,
   ErrorResponse,
   HealthStatus,
+  IssuerList,
   ListArticlesParams,
   RefreshResult,
   SignalsResponse,
@@ -37,7 +38,6 @@ type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const getHealthCheckUrl = () => {
@@ -113,7 +113,6 @@ export function useHealthCheck<
 }
 
 /**
- * Returns all articles with optional filters
  * @summary List all processed articles
  */
 export const getListArticlesUrl = (params?: ListArticlesParams) => {
@@ -208,7 +207,6 @@ export function useListArticles<
 }
 
 /**
- * Returns detailed article with AI analysis
  * @summary Get article detail
  */
 export const getGetArticleUrl = (id: number) => {
@@ -296,8 +294,7 @@ export function useGetArticle<
 }
 
 /**
- * Returns grouped insights by sector and event type
- * @summary Get aggregated credit signals
+ * @summary Get aggregated credit signals by sector and event type
  */
 export const getGetSignalsUrl = () => {
   return `/api/signals`;
@@ -348,7 +345,7 @@ export type GetSignalsQueryResult = NonNullable<
 export type GetSignalsQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get aggregated credit signals
+ * @summary Get aggregated credit signals by sector and event type
  */
 
 export function useGetSignals<
@@ -372,7 +369,6 @@ export function useGetSignals<
 }
 
 /**
- * Returns top insights for the day - most negative events, impacted sectors, key trends
  * @summary Get daily credit brief
  */
 export const getGetDailyBriefUrl = () => {
@@ -448,8 +444,83 @@ export function useGetDailyBrief<
 }
 
 /**
- * Fetches new articles from news sources and processes them with AI
- * @summary Trigger data ingestion
+ * Returns aggregated risk data per company/issuer — the view traders actually need
+ * @summary Get issuer-level credit intelligence
+ */
+export const getListIssuersUrl = () => {
+  return `/api/issuers`;
+};
+
+export const listIssuers = async (
+  options?: RequestInit,
+): Promise<IssuerList> => {
+  return customFetch<IssuerList>(getListIssuersUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListIssuersQueryKey = () => {
+  return [`/api/issuers`] as const;
+};
+
+export const getListIssuersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listIssuers>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listIssuers>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListIssuersQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listIssuers>>> = ({
+    signal,
+  }) => listIssuers({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listIssuers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListIssuersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listIssuers>>
+>;
+export type ListIssuersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get issuer-level credit intelligence
+ */
+
+export function useListIssuers<
+  TData = Awaited<ReturnType<typeof listIssuers>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listIssuers>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListIssuersQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Trigger data ingestion and AI processing
  */
 export const getTriggerRefreshUrl = () => {
   return `/api/refresh`;
@@ -507,7 +578,7 @@ export type TriggerRefreshMutationResult = NonNullable<
 export type TriggerRefreshMutationError = ErrorType<unknown>;
 
 /**
- * @summary Trigger data ingestion
+ * @summary Trigger data ingestion and AI processing
  */
 export const useTriggerRefresh = <
   TError = ErrorType<unknown>,

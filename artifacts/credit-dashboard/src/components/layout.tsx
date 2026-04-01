@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Activity, BarChart3, FileText, Home, RefreshCw, Zap } from "lucide-react";
+import { Activity, BarChart3, FileText, Home, RefreshCw, Zap, Building } from "lucide-react";
 import { useTriggerRefresh } from "@workspace/api-client-react";
 import { Button } from "./ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -35,6 +35,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/", label: "Dashboard", icon: Home },
+    { href: "/issuers", label: "Issuers", icon: Building },
     { href: "/signals", label: "Sector Signals", icon: Activity },
     { href: "/brief", label: "Daily Brief", icon: FileText },
   ];
@@ -68,7 +69,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         <nav className="flex-1 px-2 space-y-1 mt-4">
           {navItems.map((item) => {
-            const isActive = location === item.href;
+            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
             return (
               <Link key={item.href} href={item.href} className="block">
                 <Button

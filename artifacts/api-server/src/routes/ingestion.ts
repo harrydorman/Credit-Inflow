@@ -52,6 +52,13 @@ router.post("/refresh", async (req, res): Promise<void> => {
           whyItMatters: analysis?.whyItMatters ?? null,
           whoCares: analysis?.whoCares ?? null,
           cloImpact: analysis?.cloImpact ?? false,
+          // New trader-critical fields
+          issuerName: analysis?.issuerName ?? null,
+          urgencyScore: analysis?.urgencyScore ?? null,
+          covenantFlag: analysis?.covenantFlag ?? false,
+          ratingMentioned: analysis?.ratingMentioned ?? null,
+          ratingAgency: analysis?.ratingAgency ?? null,
+          marketImpact: analysis?.marketImpact ?? null,
           processedAt: analysis ? new Date() : null,
         });
 

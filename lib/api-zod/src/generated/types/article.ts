@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Credit Intelligence Dashboard API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 
 export interface Article {
@@ -27,6 +27,17 @@ export interface Article {
   /** @nullable */
   whoCares?: string | null;
   cloImpact: boolean;
+  /** @nullable */
+  issuerName?: string | null;
+  /** @nullable */
+  urgencyScore?: number | null;
+  covenantFlag: boolean;
+  /** @nullable */
+  ratingMentioned?: string | null;
+  /** @nullable */
+  ratingAgency?: string | null;
+  /** @nullable */
+  marketImpact?: string | null;
   /** @nullable */
   processedAt?: Date | null;
   createdAt: Date;

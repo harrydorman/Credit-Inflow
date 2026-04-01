@@ -5,7 +5,9 @@
  * Credit Intelligence Dashboard API
  * OpenAPI spec version: 0.2.0
  */
+import type { IssuerSignal } from "./issuerSignal";
 
-export interface ErrorResponse {
-  error: string;
+export interface IssuerList {
+  issuers: IssuerSignal[];
+  total: number;
 }

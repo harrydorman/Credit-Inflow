@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Api
-  version: 0.1.0
+  version: 0.2.0
   description: Credit Intelligence Dashboard API
 servers:
   - url: /api
@@ -13,6 +13,8 @@ tags:
     description: News article operations
   - name: signals
     description: Credit signal aggregations
+  - name: issuers
+    description: Issuer-level intelligence
   - name: ingestion
     description: Data ingestion operations
 paths:
@@ -21,7 +23,6 @@ paths:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -35,7 +36,6 @@ paths:
       operationId: listArticles
       tags: [articles]
       summary: List all processed articles
-      description: Returns all articles with optional filters
       parameters:
         - name: sector
           in: query
@@ -52,6 +52,26 @@ paths:
           required: false
           schema:
             type: string
+        - name: issuerName
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: covenantFlag
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: marketImpact
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: minUrgency
+          in: query
+          required: false
+          schema:
+            type: integer
         - name: limit
           in: query
           required: false
@@ -77,7 +97,6 @@ paths:
       operationId: getArticle
       tags: [articles]
       summary: Get article detail
-      description: Returns detailed article with AI analysis
       parameters:
         - name: id
           in: path
@@ -102,8 +121,7 @@ paths:
     get:
       operationId: getSignals
       tags: [signals]
-      summary: Get aggregated credit signals
-      description: Returns grouped insights by sector and event type
+      summary: Get aggregated credit signals by sector and event type
       responses:
         "200":
           description: Aggregated signals
@@ -117,7 +135,6 @@ paths:
       operationId: getDailyBrief
       tags: [signals]
       summary: Get daily credit brief
-      description: Returns top insights for the day - most negative events, impacted sectors, key trends
       responses:
         "200":
           description: Daily credit brief
@@ -126,12 +143,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/DailyBrief"
 
+  /issuers:
+    get:
+      operationId: listIssuers
+      tags: [issuers]
+      summary: Get issuer-level credit intelligence
+      description: Returns aggregated risk data per company/issuer — the view traders actually need
+      responses:
+        "200":
+          description: Issuer signals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuerList"
+
   /refresh:
     post:
       operationId: triggerRefresh
       tags: [ingestion]
-      summary: Trigger data ingestion
-      description: Fetches new articles from news sources and processes them with AI
+      summary: Trigger data ingestion and AI processing
       responses:
         "200":
           description: Refresh result
@@ -188,6 +218,18 @@ components:
           type: ["string", "null"]
         cloImpact:
           type: boolean
+        issuerName:
+          type: ["string", "null"]
+        urgencyScore:
+          type: ["integer", "null"]
+        covenantFlag:
+          type: boolean
+        ratingMentioned:
+          type: ["string", "null"]
+        ratingAgency:
+          type: ["string", "null"]
+        marketImpact:
+          type: ["string", "null"]
         processedAt:
           type: ["string", "null"]
           format: date-time
@@ -201,6 +243,7 @@ components:
         - publishedAt
         - url
         - cloImpact
+        - covenantFlag
         - createdAt
 
     ArticleList:
@@ -257,6 +300,59 @@ components:
         - negativeCount
         - sectors
 
+    IssuerSignal:
+      type: object
+      properties:
+        issuerName:
+          type: string
+        sector:
+          type: ["string", "null"]
+        totalArticles:
+          type: integer
+        negativeCount:
+          type: integer
+        covenantFlag:
+          type: boolean
+        maxUrgency:
+          type: integer
+        eventTypes:
+          type: array
+          items:
+            type: string
+        ratingMentioned:
+          type: ["string", "null"]
+        ratingAgency:
+          type: ["string", "null"]
+        marketImpact:
+          type: ["string", "null"]
+        latestArticleDate:
+          type: string
+          format: date-time
+        riskScore:
+          type: number
+      required:
+        - issuerName
+        - totalArticles
+        - negativeCount
+        - covenantFlag
+        - maxUrgency
+        - eventTypes
+        - latestArticleDate
+        - riskScore
+
+    IssuerList:
+      type: object
+      properties:
+        issuers:
+          type: array
+          items:
+            $ref: "#/components/schemas/IssuerSignal"
+        total:
+          type: integer
+      required:
+        - issuers
+        - total
+
     SignalsResponse:
       type: object
       properties:
@@ -293,9 +389,22 @@ components:
           type: ["string", "null"]
         eventType:
           type: ["string", "null"]
+        issuerName:
+          type: ["string", "null"]
+        urgencyScore:
+          type: ["integer", "null"]
+        covenantFlag:
+          type: boolean
+        ratingMentioned:
+          type: ["string", "null"]
+        ratingAgency:
+          type: ["string", "null"]
+        marketImpact:
+          type: ["string", "null"]
       required:
         - articleId
         - title
+        - covenantFlag
 
     DailyBrief:
       type: object
@@ -318,6 +427,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DailyBriefItem"
+        covenantAlerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyBriefItem"
+        criticalAlerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyBriefItem"
         totalArticlesProcessed:
           type: integer
       required:
@@ -326,6 +443,8 @@ components:
         - mostImpactedSectors
         - keyTrends
         - cloAlerts
+        - covenantAlerts
+        - criticalAlerts
         - totalArticlesProcessed
 
     RefreshResult:

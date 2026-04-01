@@ -45,30 +45,41 @@ artifacts-monorepo/
 
 ## API Endpoints
 
-- `GET /api/articles` — List all processed articles (supports filters: sector, eventType, sentiment, limit, offset)
-- `GET /api/articles/:id` — Get article detail with full AI analysis
-- `GET /api/signals` — Aggregated credit signals by sector and event type
-- `GET /api/signals/daily-brief` — Daily credit brief: top negative events, impacted sectors, trends, CLO alerts
+- `GET /api/articles` — List articles (filters: sector, eventType, sentiment, issuerName, covenantFlag, marketImpact, minUrgency, limit, offset)
+- `GET /api/articles/:id` — Article detail with full AI analysis
+- `GET /api/signals` — Aggregated credit signals by sector and event type (includes covenant/critical alerts)
+- `GET /api/signals/daily-brief` — Daily brief with covenantAlerts + criticalAlerts sections
+- `GET /api/issuers` — Issuer risk aggregation (sorted by covenant flag, urgency, negative count)
 - `POST /api/refresh` — Trigger news ingestion + AI processing
 
 ## Key Features
 
+### Phase 1
 1. **Data Ingestion** — Pulls from NewsAPI (credit market keywords) + RSS feeds (Bloomberg, Reuters, FT)
 2. **AI Processing** — Each article gets: summary, sector tag, event type, sentiment analysis, "Why It Matters", "Who Cares"
 3. **CLO Impact Detection** — Articles mentioning leveraged loans or CLO markets are flagged
 4. **Signal Aggregation** — Risk scores by sector, event type distribution, high-risk sector highlighting
 5. **Daily Credit Brief** — Curated daily summary of top negative events, trends, CLO alerts
 
+### Phase 2 (Trader-Critical Signals)
+6. **Issuer Name Extraction** — AI extracts specific company names (e.g. "Ford Motor Credit", "Dish Network")
+7. **Urgency Scoring** — 1-5 triage score (5=critical/covenant breach, 4=downgrade, 3=spread widening, 2=moderate, 1=info)
+8. **Covenant Flag Detection** — Binary flag for covenant breach mentions — most critical signal for credit traders
+9. **Rating Agency Tracking** — Moody's, S&P, Fitch rating mentions with specific rating extracted
+10. **Market Impact Classification** — high/medium/low impact per article
+11. **Issuer Intelligence Page** — Aggregated risk table per company with risk score, clickable to filter feed
+
 ## Frontend Pages
 
-- `/` — Main feed with article list + daily brief sidebar
-- `/article/:id` — Article detail with full AI analysis
-- `/signals` — Sector risk matrix + event type breakdown
-- `/brief` — Dedicated daily credit brief page
+- `/` — Main feed with covenant/urgency/impact filters + daily brief sidebar with covenant alerts
+- `/article/:id` — Article detail with full AI analysis + all new fields
+- `/signals` — Sector risk matrix + event type breakdown + covenant/critical alert sections
+- `/issuers` — Issuer Intelligence table: risk score, covenant flag, urgency, rating per company
+- `/brief` — Daily brief with Covenant Alerts (top) + Critical Events + CLO Alerts sections
 
 ## Database Schema
 
-- `articles` table — stores raw + AI-processed article data
+- `articles` table — raw + AI-processed data including: issuerName, urgencyScore, covenantFlag, ratingMentioned, ratingAgency, marketImpact
 
 ## Running Codegen (after OpenAPI spec changes)
 

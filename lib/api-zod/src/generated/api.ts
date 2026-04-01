@@ -3,12 +3,11 @@
  * Do not edit manually.
  * Api
  * Credit Intelligence Dashboard API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -16,7 +15,6 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * Returns all articles with optional filters
  * @summary List all processed articles
  */
 export const listArticlesQueryLimitDefault = 50;
@@ -26,6 +24,10 @@ export const ListArticlesQueryParams = zod.object({
   sector: zod.coerce.string().optional(),
   eventType: zod.coerce.string().optional(),
   sentiment: zod.coerce.string().optional(),
+  issuerName: zod.coerce.string().optional(),
+  covenantFlag: zod.coerce.boolean().optional(),
+  marketImpact: zod.coerce.string().optional(),
+  minUrgency: zod.coerce.number().optional(),
   limit: zod.coerce.number().default(listArticlesQueryLimitDefault),
   offset: zod.coerce.number().default(listArticlesQueryOffsetDefault),
 });
@@ -46,6 +48,12 @@ export const ListArticlesResponse = zod.object({
       whyItMatters: zod.string().nullish(),
       whoCares: zod.string().nullish(),
       cloImpact: zod.boolean(),
+      issuerName: zod.string().nullish(),
+      urgencyScore: zod.number().nullish(),
+      covenantFlag: zod.boolean(),
+      ratingMentioned: zod.string().nullish(),
+      ratingAgency: zod.string().nullish(),
+      marketImpact: zod.string().nullish(),
       processedAt: zod.coerce.date().nullish(),
       createdAt: zod.coerce.date(),
     }),
@@ -54,7 +62,6 @@ export const ListArticlesResponse = zod.object({
 });
 
 /**
- * Returns detailed article with AI analysis
  * @summary Get article detail
  */
 export const GetArticleParams = zod.object({
@@ -75,13 +82,18 @@ export const GetArticleResponse = zod.object({
   whyItMatters: zod.string().nullish(),
   whoCares: zod.string().nullish(),
   cloImpact: zod.boolean(),
+  issuerName: zod.string().nullish(),
+  urgencyScore: zod.number().nullish(),
+  covenantFlag: zod.boolean(),
+  ratingMentioned: zod.string().nullish(),
+  ratingAgency: zod.string().nullish(),
+  marketImpact: zod.string().nullish(),
   processedAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
 });
 
 /**
- * Returns grouped insights by sector and event type
- * @summary Get aggregated credit signals
+ * @summary Get aggregated credit signals by sector and event type
  */
 export const GetSignalsResponse = zod.object({
   bySector: zod.array(
@@ -106,7 +118,6 @@ export const GetSignalsResponse = zod.object({
 });
 
 /**
- * Returns top insights for the day - most negative events, impacted sectors, key trends
  * @summary Get daily credit brief
  */
 export const GetDailyBriefResponse = zod.object({
@@ -119,6 +130,12 @@ export const GetDailyBriefResponse = zod.object({
       sector: zod.string().nullish(),
       sentiment: zod.string().nullish(),
       eventType: zod.string().nullish(),
+      issuerName: zod.string().nullish(),
+      urgencyScore: zod.number().nullish(),
+      covenantFlag: zod.boolean(),
+      ratingMentioned: zod.string().nullish(),
+      ratingAgency: zod.string().nullish(),
+      marketImpact: zod.string().nullish(),
     }),
   ),
   mostImpactedSectors: zod.array(
@@ -139,14 +156,75 @@ export const GetDailyBriefResponse = zod.object({
       sector: zod.string().nullish(),
       sentiment: zod.string().nullish(),
       eventType: zod.string().nullish(),
+      issuerName: zod.string().nullish(),
+      urgencyScore: zod.number().nullish(),
+      covenantFlag: zod.boolean(),
+      ratingMentioned: zod.string().nullish(),
+      ratingAgency: zod.string().nullish(),
+      marketImpact: zod.string().nullish(),
+    }),
+  ),
+  covenantAlerts: zod.array(
+    zod.object({
+      articleId: zod.number(),
+      title: zod.string(),
+      summary: zod.string().nullish(),
+      sector: zod.string().nullish(),
+      sentiment: zod.string().nullish(),
+      eventType: zod.string().nullish(),
+      issuerName: zod.string().nullish(),
+      urgencyScore: zod.number().nullish(),
+      covenantFlag: zod.boolean(),
+      ratingMentioned: zod.string().nullish(),
+      ratingAgency: zod.string().nullish(),
+      marketImpact: zod.string().nullish(),
+    }),
+  ),
+  criticalAlerts: zod.array(
+    zod.object({
+      articleId: zod.number(),
+      title: zod.string(),
+      summary: zod.string().nullish(),
+      sector: zod.string().nullish(),
+      sentiment: zod.string().nullish(),
+      eventType: zod.string().nullish(),
+      issuerName: zod.string().nullish(),
+      urgencyScore: zod.number().nullish(),
+      covenantFlag: zod.boolean(),
+      ratingMentioned: zod.string().nullish(),
+      ratingAgency: zod.string().nullish(),
+      marketImpact: zod.string().nullish(),
     }),
   ),
   totalArticlesProcessed: zod.number(),
 });
 
 /**
- * Fetches new articles from news sources and processes them with AI
- * @summary Trigger data ingestion
+ * Returns aggregated risk data per company/issuer — the view traders actually need
+ * @summary Get issuer-level credit intelligence
+ */
+export const ListIssuersResponse = zod.object({
+  issuers: zod.array(
+    zod.object({
+      issuerName: zod.string(),
+      sector: zod.string().nullish(),
+      totalArticles: zod.number(),
+      negativeCount: zod.number(),
+      covenantFlag: zod.boolean(),
+      maxUrgency: zod.number(),
+      eventTypes: zod.array(zod.string()),
+      ratingMentioned: zod.string().nullish(),
+      ratingAgency: zod.string().nullish(),
+      marketImpact: zod.string().nullish(),
+      latestArticleDate: zod.coerce.date(),
+      riskScore: zod.number(),
+    }),
+  ),
+  total: zod.number(),
+});
+
+/**
+ * @summary Trigger data ingestion and AI processing
  */
 export const TriggerRefreshResponse = zod.object({
   fetched: zod.number(),

@@ -93,13 +93,42 @@ router.get("/signals/daily-brief", async (_req, res): Promise<void> => {
 
   const today = new Date().toISOString().split("T")[0];
 
+  const toItem = (a: typeof articles[0]) => ({
+    articleId: a.id,
+    title: a.title,
+    summary: a.summary,
+    sector: a.sector,
+    sentiment: a.sentiment,
+    eventType: a.eventType,
+    issuerName: a.issuerName,
+    urgencyScore: a.urgencyScore,
+    covenantFlag: a.covenantFlag,
+    ratingMentioned: a.ratingMentioned,
+    ratingAgency: a.ratingAgency,
+    marketImpact: a.marketImpact,
+  });
+
+  // Most negative events sorted by urgency then date
   const negativeArticles = articles
     .filter((a) => a.sentiment === "negative")
-    .sort(
-      (a, b) =>
-        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-    )
-    .slice(0, 5);
+    .sort((a, b) => {
+      const urgDiff = (b.urgencyScore ?? 0) - (a.urgencyScore ?? 0);
+      if (urgDiff !== 0) return urgDiff;
+      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+    })
+    .slice(0, 8);
+
+  // Covenant alerts — critical early warning
+  const covenantAlerts = articles
+    .filter((a) => a.covenantFlag)
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    .slice(0, 6);
+
+  // Critical urgency score 4-5
+  const criticalAlerts = articles
+    .filter((a) => (a.urgencyScore ?? 0) >= 4)
+    .sort((a, b) => (b.urgencyScore ?? 0) - (a.urgencyScore ?? 0))
+    .slice(0, 6);
 
   const sectorRiskMap = new Map<
     string,
@@ -146,13 +175,17 @@ router.get("/signals/daily-brief", async (_req, res): Promise<void> => {
     .map(([et, count]) => `${count} articles tagged as "${et}"`);
 
   const negativeSectors = mostImpactedSectors.slice(0, 2).map((s) => s.sector);
-  const keyTrends = [
+  const keyTrends: string[] = [
     ...topEventTypes,
     ...(negativeSectors.length > 0
-      ? [
-          `Elevated credit risk in ${negativeSectors.join(" and ")} sectors`,
-        ]
+      ? [`Elevated credit risk in ${negativeSectors.join(" and ")} sectors`]
       : []),
+    covenantAlerts.length > 0
+      ? `${covenantAlerts.length} covenant-related events flagged — review immediately`
+      : null,
+    criticalAlerts.length > 0
+      ? `${criticalAlerts.length} high/critical urgency events detected today`
+      : null,
     articles.filter((a) => a.cloImpact).length > 0
       ? `${articles.filter((a) => a.cloImpact).length} CLO-relevant events detected`
       : null,
@@ -169,24 +202,12 @@ router.get("/signals/daily-brief", async (_req, res): Promise<void> => {
   res.json(
     GetDailyBriefResponse.parse({
       date: today,
-      mostNegativeEvents: negativeArticles.map((a) => ({
-        articleId: a.id,
-        title: a.title,
-        summary: a.summary,
-        sector: a.sector,
-        sentiment: a.sentiment,
-        eventType: a.eventType,
-      })),
+      mostNegativeEvents: negativeArticles.map(toItem),
       mostImpactedSectors,
       keyTrends,
-      cloAlerts: cloAlerts.map((a) => ({
-        articleId: a.id,
-        title: a.title,
-        summary: a.summary,
-        sector: a.sector,
-        sentiment: a.sentiment,
-        eventType: a.eventType,
-      })),
+      cloAlerts: cloAlerts.map(toItem),
+      covenantAlerts: covenantAlerts.map(toItem),
+      criticalAlerts: criticalAlerts.map(toItem),
       totalArticlesProcessed: articles.length,
     })
   );

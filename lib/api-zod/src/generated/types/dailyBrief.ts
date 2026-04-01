@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Credit Intelligence Dashboard API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import type { DailyBriefItem } from "./dailyBriefItem";
 import type { SectorSignal } from "./sectorSignal";
@@ -14,5 +14,7 @@ export interface DailyBrief {
   mostImpactedSectors: SectorSignal[];
   keyTrends: string[];
   cloAlerts: DailyBriefItem[];
+  covenantAlerts: DailyBriefItem[];
+  criticalAlerts: DailyBriefItem[];
   totalArticlesProcessed: number;
 }

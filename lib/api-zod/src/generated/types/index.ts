@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Credit Intelligence Dashboard API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 
 export * from "./article";
@@ -13,6 +13,8 @@ export * from "./dailyBriefItem";
 export * from "./errorResponse";
 export * from "./eventTypeSignal";
 export * from "./healthStatus";
+export * from "./issuerList";
+export * from "./issuerSignal";
 export * from "./listArticlesParams";
 export * from "./refreshResult";
 export * from "./sectorSignal";

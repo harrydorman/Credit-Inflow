@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and, gte } from "drizzle-orm";
 import { db, articlesTable } from "@workspace/db";
 import {
   ListArticlesQueryParams,
@@ -17,21 +17,19 @@ router.get("/articles", async (req, res): Promise<void> => {
     return;
   }
 
-  const { sector, eventType, sentiment, limit, offset } = query.data;
-
-  let dbQuery = db
-    .select()
-    .from(articlesTable)
-    .orderBy(articlesTable.publishedAt)
-    .$dynamic();
+  const { sector, eventType, sentiment, issuerName, covenantFlag, marketImpact, minUrgency, limit, offset } = query.data;
 
   const conditions = [];
   if (sector) conditions.push(eq(articlesTable.sector, sector));
   if (eventType) conditions.push(eq(articlesTable.eventType, eventType));
   if (sentiment) conditions.push(eq(articlesTable.sentiment, sentiment));
+  if (issuerName) conditions.push(eq(articlesTable.issuerName, issuerName));
+  if (covenantFlag === true) conditions.push(eq(articlesTable.covenantFlag, true));
+  if (marketImpact) conditions.push(eq(articlesTable.marketImpact, marketImpact));
+  if (minUrgency != null) conditions.push(gte(articlesTable.urgencyScore, minUrgency));
 
+  let dbQuery = db.select().from(articlesTable).$dynamic();
   if (conditions.length > 0) {
-    const { and } = await import("drizzle-orm");
     dbQuery = dbQuery.where(and(...conditions));
   }
 

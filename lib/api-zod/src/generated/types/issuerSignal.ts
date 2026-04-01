@@ -6,26 +6,21 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export interface DailyBriefItem {
-  articleId: number;
-  title: string;
-  /** @nullable */
-  summary?: string | null;
+export interface IssuerSignal {
+  issuerName: string;
   /** @nullable */
   sector?: string | null;
-  /** @nullable */
-  sentiment?: string | null;
-  /** @nullable */
-  eventType?: string | null;
-  /** @nullable */
-  issuerName?: string | null;
-  /** @nullable */
-  urgencyScore?: number | null;
+  totalArticles: number;
+  negativeCount: number;
   covenantFlag: boolean;
+  maxUrgency: number;
+  eventTypes: string[];
   /** @nullable */
   ratingMentioned?: string | null;
   /** @nullable */
   ratingAgency?: string | null;
   /** @nullable */
   marketImpact?: string | null;
+  latestArticleDate: Date;
+  riskScore: number;
 }

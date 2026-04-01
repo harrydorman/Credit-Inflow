@@ -2,7 +2,7 @@ import { useGetDailyBrief } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, Clock, Target, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, Clock, Target, TrendingDown, TrendingUp, AlertOctagon, Flame } from "lucide-react";
 import { Link } from "wouter";
 import { Separator } from "@/components/ui/separator";
 
@@ -38,6 +38,73 @@ export default function Brief() {
           </div>
         ) : brief ? (
           <div className="space-y-8">
+            
+            {/* COVENANT ALERTS SECTION */}
+            {brief.covenantAlerts && brief.covenantAlerts.length > 0 && (
+              <section>
+                <h2 className="text-xl font-bold font-mono text-red-500 flex items-center mb-4 animate-pulse">
+                  <AlertOctagon className="h-6 w-6 mr-2" />
+                  COVENANT ALERTS
+                </h2>
+                <div className="grid gap-4">
+                  {brief.covenantAlerts.map(alert => (
+                    <Card key={alert.articleId} className="bg-red-950/20 border-red-900/50">
+                      <CardContent className="p-4 flex justify-between items-start gap-4">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            {alert.issuerName && <span className="font-mono text-xs font-bold bg-red-900/50 text-red-200 px-2 py-0.5 rounded">{alert.issuerName}</span>}
+                            {alert.urgencyScore && <span className="font-mono text-xs font-bold text-red-400">URGENCY: {alert.urgencyScore}/5</span>}
+                          </div>
+                          <Link href={`/article/${alert.articleId}`} className="text-lg font-bold hover:text-red-400 transition-colors">
+                            {alert.title}
+                          </Link>
+                          <p className="text-muted-foreground text-sm mt-2 line-clamp-2">{alert.summary}</p>
+                        </div>
+                        <div className="shrink-0 text-right font-mono text-xs space-y-1">
+                          <div className="text-red-500 font-bold">⚠ COVENANT</div>
+                          <div className="text-muted-foreground">{alert.sector?.toUpperCase()}</div>
+                          {alert.ratingMentioned && <div className="text-purple-400">{alert.ratingAgency ? `${alert.ratingAgency}: ` : ''}{alert.ratingMentioned}</div>}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* CRITICAL ALERTS SECTION */}
+            {brief.criticalAlerts && brief.criticalAlerts.length > 0 && (
+              <section>
+                <h2 className="text-xl font-bold font-mono text-orange-500 flex items-center mb-4">
+                  <Flame className="h-6 w-6 mr-2" />
+                  CRITICAL EVENTS (URGENCY 4-5)
+                </h2>
+                <div className="grid gap-4">
+                  {brief.criticalAlerts.map(alert => (
+                    <Card key={alert.articleId} className="bg-orange-950/10 border-orange-900/30">
+                      <CardContent className="p-4 flex justify-between items-start gap-4">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            {alert.issuerName && <span className="font-mono text-xs font-bold bg-orange-900/30 text-orange-200 px-2 py-0.5 rounded">{alert.issuerName}</span>}
+                            {alert.urgencyScore && <span className="font-mono text-xs font-bold text-orange-400">URGENCY: {alert.urgencyScore}/5</span>}
+                          </div>
+                          <Link href={`/article/${alert.articleId}`} className="text-lg font-bold hover:text-orange-400 transition-colors">
+                            {alert.title}
+                          </Link>
+                          <p className="text-muted-foreground text-sm mt-2 line-clamp-2">{alert.summary}</p>
+                        </div>
+                        <div className="shrink-0 text-right font-mono text-xs space-y-1">
+                          <div className="text-orange-500 font-bold">{alert.sentiment?.toUpperCase()}</div>
+                          <div className="text-muted-foreground">{alert.sector?.toUpperCase()}</div>
+                          {alert.marketImpact && <div className="text-orange-300">IMPACT: {alert.marketImpact.toUpperCase()}</div>}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* CLO ALERTS SECTION */}
             {brief.cloAlerts.length > 0 && (
               <section>
@@ -78,12 +145,21 @@ export default function Brief() {
                     {brief.mostNegativeEvents.map(event => (
                       <div key={event.articleId} className="p-4">
                         <Link href={`/article/${event.articleId}`} className="font-semibold hover:text-primary block mb-1">
+                          {event.issuerName ? <span className="font-bold mr-1">{event.issuerName}:</span> : null}
                           {event.title}
                         </Link>
                         <div className="flex gap-2 text-xs font-mono text-muted-foreground">
+                          {event.urgencyScore && <span className="text-orange-400">U{event.urgencyScore}</span>}
+                          <span>|</span>
                           <span className="text-destructive">{event.sentiment?.toUpperCase()}</span>
                           <span>|</span>
                           <span>{event.sector?.toUpperCase()}</span>
+                          {event.ratingMentioned && (
+                            <>
+                              <span>|</span>
+                              <span className="text-purple-400">{event.ratingMentioned}</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     ))}

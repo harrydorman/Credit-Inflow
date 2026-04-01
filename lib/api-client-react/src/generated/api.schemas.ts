@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Credit Intelligence Dashboard API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 export interface HealthStatus {
   status: string;
@@ -35,6 +35,17 @@ export interface Article {
   whoCares?: string | null;
   cloImpact: boolean;
   /** @nullable */
+  issuerName?: string | null;
+  /** @nullable */
+  urgencyScore?: number | null;
+  covenantFlag: boolean;
+  /** @nullable */
+  ratingMentioned?: string | null;
+  /** @nullable */
+  ratingAgency?: string | null;
+  /** @nullable */
+  marketImpact?: string | null;
+  /** @nullable */
   processedAt?: string | null;
   createdAt: string;
 }
@@ -59,6 +70,30 @@ export interface EventTypeSignal {
   sectors: string[];
 }
 
+export interface IssuerSignal {
+  issuerName: string;
+  /** @nullable */
+  sector?: string | null;
+  totalArticles: number;
+  negativeCount: number;
+  covenantFlag: boolean;
+  maxUrgency: number;
+  eventTypes: string[];
+  /** @nullable */
+  ratingMentioned?: string | null;
+  /** @nullable */
+  ratingAgency?: string | null;
+  /** @nullable */
+  marketImpact?: string | null;
+  latestArticleDate: string;
+  riskScore: number;
+}
+
+export interface IssuerList {
+  issuers: IssuerSignal[];
+  total: number;
+}
+
 export interface SignalsResponse {
   bySector: SectorSignal[];
   byEventType: EventTypeSignal[];
@@ -78,6 +113,17 @@ export interface DailyBriefItem {
   sentiment?: string | null;
   /** @nullable */
   eventType?: string | null;
+  /** @nullable */
+  issuerName?: string | null;
+  /** @nullable */
+  urgencyScore?: number | null;
+  covenantFlag: boolean;
+  /** @nullable */
+  ratingMentioned?: string | null;
+  /** @nullable */
+  ratingAgency?: string | null;
+  /** @nullable */
+  marketImpact?: string | null;
 }
 
 export interface DailyBrief {
@@ -86,6 +132,8 @@ export interface DailyBrief {
   mostImpactedSectors: SectorSignal[];
   keyTrends: string[];
   cloAlerts: DailyBriefItem[];
+  covenantAlerts: DailyBriefItem[];
+  criticalAlerts: DailyBriefItem[];
   totalArticlesProcessed: number;
 }
 
@@ -101,6 +149,10 @@ export type ListArticlesParams = {
   sector?: string;
   eventType?: string;
   sentiment?: string;
+  issuerName?: string;
+  covenantFlag?: boolean;
+  marketImpact?: string;
+  minUrgency?: number;
   limit?: number;
   offset?: number;
 };
