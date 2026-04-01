@@ -1,0 +1,115 @@
+Build a full-stack MVP web application called "Credit Intelligence Dashboard" designed for credit analysts, fixed income traders, CLO professionals, and portfolio managers.
+
+The goal of the application is to aggregate financial news related to credit markets and transform it into structured, actionable insights.
+
+TECH STACK REQUIREMENTS:
+
+Backend: Python (FastAPI preferred)
+Frontend: Simple React or lightweight HTML/CSS (keep clean and minimal)
+Database: SQLite (for MVP simplicity)
+Use OpenAI API for summarization and analysis
+Use free news APIs (e.g., NewsAPI or RSS feeds)
+
+CORE FEATURES TO BUILD:
+
+DATA INGESTION LAYER
+Pull financial news from:
+NewsAPI (focus on keywords like "credit markets", "leveraged loans", "high yield bonds", "downgrades", "defaults")
+RSS feeds from major financial news sources
+Store raw articles in database with:
+title
+source
+publish date
+URL
+raw content
+AI PROCESSING LAYER
+For each article, call OpenAI API to generate:
+A concise summary (3–5 sentences)
+Classification tags:
+Sector (e.g., Retail, Tech, Energy)
+Event type (downgrade, earnings, default risk, refinancing, M&A, macro)
+Sentiment (positive, negative, neutral for credit)
+"Why This Matters" section:
+Explain implications for:
+credit risk
+bond spreads
+CLO portfolios (if relevant)
+"Who Cares":
+Tag relevant users:
+Credit Analysts
+Traders
+Portfolio Managers
+CLO Managers
+
+Store all AI outputs in the database.
+
+API ENDPOINTS (FastAPI)
+Create endpoints:
+GET /articles → list all processed articles
+GET /articles/{id} → detailed article view
+GET /signals → aggregated insights (group by sector/event type)
+POST /refresh → trigger new data ingestion + processing
+FRONTEND DASHBOARD
+
+Build a clean dashboard with:
+
+A. Main Feed
+
+List of articles showing:
+Title
+Summary
+Tags (sector, event type)
+Sentiment indicator
+
+B. Detail View
+
+Full summary
+"Why This Matters"
+"Who Cares"
+
+C. Filters
+
+Filter by:
+Sector
+Event type
+Sentiment
+
+D. Daily Credit Brief Section
+
+Aggregate top insights:
+Most negative credit events
+Most impacted sectors
+Key trends
+LOGIC FOR SIGNAL DETECTION
+Implement simple aggregation logic:
+Count number of negative events per sector
+Identify sectors with highest concentration of risk signals
+Highlight:
+multiple downgrades
+repeated negative sentiment
+SCHEDULING
+Add a simple background job (or manual trigger) to:
+fetch new articles every few hours
+process with AI
+Avoid duplicate articles
+UI DESIGN
+Keep it minimal, professional (Bloomberg-like feel)
+Use cards or tables
+No heavy styling needed
+ENVIRONMENT VARIABLES
+Use environment variables for:
+OPENAI_API_KEY
+NEWS_API_KEY
+BONUS (IF TIME PERMITS)
+Add a “CLO Impact” flag if article mentions leveraged loans or ratings downgrades
+Basic keyword highlighting
+
+OUTPUT REQUIREMENTS:
+
+Fully working app inside Replit
+Clear README with setup instructions
+Modular, clean code structure
+Comments explaining major components
+
+FOCUS:
+Prioritize functionality over perfection. The goal is to produce a working prototype that demonstrates how raw financial news can be transformed into structured credit insights.
