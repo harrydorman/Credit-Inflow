@@ -77,6 +77,35 @@ export const ListArticlesResponse = zod.object({
       spreadWideningRisk: zod.boolean(),
       forcedSellingRisk: zod.boolean(),
       distressedRisk: zod.boolean(),
+      stockMove1D: zod
+        .number()
+        .nullish()
+        .describe("Issuer stock 1-day return %"),
+      stockMove5D: zod
+        .number()
+        .nullish()
+        .describe("Issuer stock 5-day return %"),
+      hyETFMove: zod.number().nullish().describe("HYG ETF 1-day move %"),
+      marketValidationSignal: zod
+        .union([
+          zod.literal("confirmed"),
+          zod.literal("mixed"),
+          zod.literal("unconfirmed"),
+          zod.literal(null),
+        ])
+        .nullish()
+        .describe(
+          "confirmed: news + market aligned; mixed: divergence; unconfirmed: no market data",
+        ),
+      confidenceScore: zod
+        .union([
+          zod.literal("high"),
+          zod.literal("medium"),
+          zod.literal("low"),
+          zod.literal(null),
+        ])
+        .nullish()
+        .describe("Combined AI signal strength + market confirmation"),
       processedAt: zod.coerce.date().nullish(),
       createdAt: zod.coerce.date(),
     }),
@@ -134,6 +163,29 @@ export const GetArticleResponse = zod.object({
   spreadWideningRisk: zod.boolean(),
   forcedSellingRisk: zod.boolean(),
   distressedRisk: zod.boolean(),
+  stockMove1D: zod.number().nullish().describe("Issuer stock 1-day return %"),
+  stockMove5D: zod.number().nullish().describe("Issuer stock 5-day return %"),
+  hyETFMove: zod.number().nullish().describe("HYG ETF 1-day move %"),
+  marketValidationSignal: zod
+    .union([
+      zod.literal("confirmed"),
+      zod.literal("mixed"),
+      zod.literal("unconfirmed"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "confirmed: news + market aligned; mixed: divergence; unconfirmed: no market data",
+    ),
+  confidenceScore: zod
+    .union([
+      zod.literal("high"),
+      zod.literal("medium"),
+      zod.literal("low"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe("Combined AI signal strength + market confirmation"),
   processedAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
 });

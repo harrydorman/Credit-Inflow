@@ -5,6 +5,8 @@
  * Credit Intelligence Dashboard API — Real-time credit risk detection and trade signal platform
  * OpenAPI spec version: 0.3.0
  */
+import type { ArticleConfidenceScore } from "./articleConfidenceScore";
+import type { ArticleMarketValidationSignal } from "./articleMarketValidationSignal";
 
 export interface Article {
   id: number;
@@ -73,6 +75,31 @@ export interface Article {
   spreadWideningRisk: boolean;
   forcedSellingRisk: boolean;
   distressedRisk: boolean;
+  /**
+   * Issuer stock 1-day return %
+   * @nullable
+   */
+  stockMove1D?: number | null;
+  /**
+   * Issuer stock 5-day return %
+   * @nullable
+   */
+  stockMove5D?: number | null;
+  /**
+   * HYG ETF 1-day move %
+   * @nullable
+   */
+  hyETFMove?: number | null;
+  /**
+   * confirmed: news + market aligned; mixed: divergence; unconfirmed: no market data
+   * @nullable
+   */
+  marketValidationSignal?: ArticleMarketValidationSignal;
+  /**
+   * Combined AI signal strength + market confirmation
+   * @nullable
+   */
+  confidenceScore?: ArticleConfidenceScore;
   /** @nullable */
   processedAt?: Date | null;
   createdAt: Date;

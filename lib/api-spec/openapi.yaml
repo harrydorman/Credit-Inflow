@@ -349,6 +349,24 @@ components:
           type: boolean
         distressedRisk:
           type: boolean
+        # Market validation layer
+        stockMove1D:
+          type: ["number", "null"]
+          description: Issuer stock 1-day return %
+        stockMove5D:
+          type: ["number", "null"]
+          description: Issuer stock 5-day return %
+        hyETFMove:
+          type: ["number", "null"]
+          description: HYG ETF 1-day move %
+        marketValidationSignal:
+          type: ["string", "null"]
+          enum: [confirmed, mixed, unconfirmed, null]
+          description: "confirmed: news + market aligned; mixed: divergence; unconfirmed: no market data"
+        confidenceScore:
+          type: ["string", "null"]
+          enum: [high, medium, low, null]
+          description: Combined AI signal strength + market confirmation
         processedAt:
           type: ["string", "null"]
           format: date-time

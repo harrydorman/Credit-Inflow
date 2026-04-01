@@ -7,7 +7,9 @@
  */
 
 export * from "./article";
+export * from "./articleConfidenceScore";
 export * from "./articleList";
+export * from "./articleMarketValidationSignal";
 export * from "./dailyBrief";
 export * from "./dailyBriefItem";
 export * from "./errorResponse";

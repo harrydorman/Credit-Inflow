@@ -2,7 +2,7 @@ import { Article } from "@workspace/api-client-react";
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Link } from "wouter";
-import { Clock, AlertTriangle, AlertOctagon } from "lucide-react";
+import { Clock, AlertTriangle, AlertOctagon, CheckCircle, AlertCircle, TrendingUp, TrendingDown } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 export function ArticleCard({ article }: { article: Article }) {
@@ -90,9 +90,41 @@ export function ArticleCard({ article }: { article: Article }) {
           <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
             {article.summary || "No summary available."}
           </p>
+            {/* Market validation row */}
           <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
             <span>SRC: {article.source}</span>
-            <span>ID: {article.id}</span>
+            <div className="flex items-center gap-1.5">
+              {/* Confidence badge */}
+              {article.confidenceScore === "high" && (
+                <span className="flex items-center gap-0.5 text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                  <CheckCircle className="h-2.5 w-2.5" /> HIGH CONF
+                </span>
+              )}
+              {article.confidenceScore === "medium" && (
+                <span className="flex items-center gap-0.5 text-amber-400 bg-amber-950/20 border border-amber-800/30 px-1.5 py-0.5 rounded text-[10px]">
+                  MED CONF
+                </span>
+              )}
+              {/* Market validation signal */}
+              {article.marketValidationSignal === "confirmed" && (
+                <span className="flex items-center gap-0.5 text-emerald-400 text-[10px] font-bold">
+                  <CheckCircle className="h-2.5 w-2.5" /> MKT CONFIRMED
+                </span>
+              )}
+              {article.marketValidationSignal === "mixed" && (
+                <span className="flex items-center gap-0.5 text-yellow-500 text-[10px] font-bold">
+                  <AlertCircle className="h-2.5 w-2.5" /> DIVERGENCE
+                </span>
+              )}
+              {/* Stock move */}
+              {article.stockMove1D !== null && article.stockMove1D !== undefined && (
+                <span className={`flex items-center gap-0.5 text-[10px] font-mono ${(article.stockMove1D) < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                  {(article.stockMove1D) < 0 ? <TrendingDown className="h-2.5 w-2.5" /> : <TrendingUp className="h-2.5 w-2.5" />}
+                  {article.stockMove1D.toFixed(2)}%
+                </span>
+              )}
+              <span>ID: {article.id}</span>
+            </div>
           </div>
         </CardContent>
       </Card>

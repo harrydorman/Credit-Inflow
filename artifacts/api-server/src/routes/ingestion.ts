@@ -3,6 +3,7 @@ import { db, articlesTable } from "@workspace/db";
 import { TriggerRefreshResponse } from "@workspace/api-zod";
 import { fetchAllArticles } from "../lib/dataProviders";
 import { analyzeArticle, passesNoiseFilter } from "../lib/aiProcessing";
+import { getETFSnapshot, validateWithMarketData } from "../lib/marketData";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -15,8 +16,16 @@ router.post("/refresh", async (req, res): Promise<void> => {
   let duplicatesSkipped = 0;
   let noiseFiltered = 0;
   let errors = 0;
+  let marketValidated = 0;
 
   try {
+    // Pre-fetch ETF snapshot once for this ingestion run (cached 15 min)
+    const etfSnapshot = await getETFSnapshot();
+    req.log.info({
+      hygMove: etfSnapshot.hyg?.move1D?.toFixed(3) ?? "n/a",
+      lqdMove: etfSnapshot.lqd?.move1D?.toFixed(3) ?? "n/a",
+    }, "ETF snapshot ready");
+
     const allRaw = await fetchAllArticles();
     fetched = allRaw.length;
     req.log.info({ fetched }, "Fetched raw articles from all providers");
@@ -45,6 +54,19 @@ router.post("/refresh", async (req, res): Promise<void> => {
         }
 
         const analysis = await analyzeArticle(raw.title, raw.rawContent);
+
+        // Market validation: run for AI-processed articles
+        let marketValidation = null;
+        if (analysis) {
+          marketValidation = await validateWithMarketData({
+            issuerName: analysis.issuerName ?? null,
+            sentiment: analysis.sentiment ?? null,
+            finalUrgencyScore: analysis.finalUrgencyScore ?? null,
+            creditSignalScore: analysis.creditSignalScore ?? null,
+            etfSnapshot,
+          });
+          marketValidated++;
+        }
 
         await db.insert(articlesTable).values({
           title: raw.title,
@@ -111,6 +133,13 @@ router.post("/refresh", async (req, res): Promise<void> => {
           forcedSellingRisk: analysis?.forcedSellingRisk ?? false,
           distressedRisk: analysis?.distressedRisk ?? false,
 
+          // Market validation (Parts 2-4)
+          stockMove1D: marketValidation?.stockMove1D ?? null,
+          stockMove5D: marketValidation?.stockMove5D ?? null,
+          hyETFMove: marketValidation?.hyETFMove ?? null,
+          marketValidationSignal: marketValidation?.validationSignal ?? null,
+          confidenceScore: marketValidation?.confidenceScore ?? null,
+
           processedAt: analysis ? new Date() : null,
         });
 
@@ -122,7 +151,7 @@ router.post("/refresh", async (req, res): Promise<void> => {
       }
     }
 
-    req.log.info({ fetched, processed, duplicatesSkipped, noiseFiltered, errors }, "Ingestion complete");
+    req.log.info({ fetched, processed, duplicatesSkipped, noiseFiltered, marketValidated, errors }, "Ingestion complete");
 
     res.json(
       TriggerRefreshResponse.parse({
@@ -130,7 +159,7 @@ router.post("/refresh", async (req, res): Promise<void> => {
         processed,
         duplicatesSkipped,
         errors,
-        message: `Ingestion complete: ${processed} new articles processed, ${noiseFiltered} noise-filtered, ${duplicatesSkipped} duplicates skipped`,
+        message: `Ingestion complete: ${processed} new articles processed (${marketValidated} market-validated), ${noiseFiltered} noise-filtered, ${duplicatesSkipped} duplicates skipped`,
       })
     );
   } catch (err) {

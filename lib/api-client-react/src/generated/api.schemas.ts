@@ -13,6 +13,34 @@ export interface ErrorResponse {
   error: string;
 }
 
+/**
+ * confirmed: news + market aligned; mixed: divergence; unconfirmed: no market data
+ * @nullable
+ */
+export type ArticleMarketValidationSignal =
+  | (typeof ArticleMarketValidationSignal)[keyof typeof ArticleMarketValidationSignal]
+  | null;
+
+export const ArticleMarketValidationSignal = {
+  confirmed: "confirmed",
+  mixed: "mixed",
+  unconfirmed: "unconfirmed",
+} as const;
+
+/**
+ * Combined AI signal strength + market confirmation
+ * @nullable
+ */
+export type ArticleConfidenceScore =
+  | (typeof ArticleConfidenceScore)[keyof typeof ArticleConfidenceScore]
+  | null;
+
+export const ArticleConfidenceScore = {
+  high: "high",
+  medium: "medium",
+  low: "low",
+} as const;
+
 export interface Article {
   id: number;
   title: string;
@@ -80,6 +108,31 @@ export interface Article {
   spreadWideningRisk: boolean;
   forcedSellingRisk: boolean;
   distressedRisk: boolean;
+  /**
+   * Issuer stock 1-day return %
+   * @nullable
+   */
+  stockMove1D?: number | null;
+  /**
+   * Issuer stock 5-day return %
+   * @nullable
+   */
+  stockMove5D?: number | null;
+  /**
+   * HYG ETF 1-day move %
+   * @nullable
+   */
+  hyETFMove?: number | null;
+  /**
+   * confirmed: news + market aligned; mixed: divergence; unconfirmed: no market data
+   * @nullable
+   */
+  marketValidationSignal?: ArticleMarketValidationSignal;
+  /**
+   * Combined AI signal strength + market confirmation
+   * @nullable
+   */
+  confidenceScore?: ArticleConfidenceScore;
   /** @nullable */
   processedAt?: string | null;
   createdAt: string;

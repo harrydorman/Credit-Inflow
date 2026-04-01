@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, integer, json } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, integer, json, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -67,6 +67,13 @@ export const articlesTable = pgTable("articles", {
   spreadWideningRisk: boolean("spread_widening_risk").notNull().default(false),
   forcedSellingRisk: boolean("forced_selling_risk").notNull().default(false),
   distressedRisk: boolean("distressed_risk").notNull().default(false),
+
+  // Market validation layer (Part 2-4)
+  stockMove1D: real("stock_move_1d"),                        // issuer stock 1-day return %
+  stockMove5D: real("stock_move_5d"),                        // issuer stock 5-day return %
+  hyETFMove: real("hy_etf_move"),                            // HYG ETF 1-day move %
+  marketValidationSignal: text("market_validation_signal"),  // confirmed | mixed | unconfirmed
+  confidenceScore: text("confidence_score"),                  // high | medium | low
 
   processedAt: timestamp("processed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

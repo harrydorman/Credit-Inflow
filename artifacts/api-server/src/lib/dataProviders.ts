@@ -42,11 +42,34 @@ export class RSSProvider implements DataSourceProvider {
   name = "RSS";
 
   private readonly feeds = [
+    // ── Original feeds ─────────────────────────────────────────────────────
     { url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml", source: "Wall Street Journal" },
     { url: "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml", source: "New York Times" },
     { url: "https://feeds.content.dowjones.io/public/rss/mw_topstories", source: "MarketWatch" },
     { url: "https://www.investing.com/rss/news_25.rss", source: "Investing.com" },
     { url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001147", source: "CNBC" },
+    // ── New feeds (Part 1 expansion) ────────────────────────────────────────
+    // MarketWatch additional categories
+    { url: "https://feeds.content.dowjones.io/public/rss/mw_bonds", source: "MarketWatch Bonds" },
+    { url: "https://feeds.content.dowjones.io/public/rss/mw_realestate", source: "MarketWatch Real Estate" },
+    { url: "https://feeds.content.dowjones.io/public/rss/mw_personalfinance", source: "MarketWatch Finance" },
+    // CNBC additional channels
+    { url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839069", source: "CNBC Finance" },
+    { url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258", source: "CNBC Economy" },
+    // Yahoo Finance
+    { url: "https://finance.yahoo.com/rss/", source: "Yahoo Finance" },
+    // Reuters
+    { url: "https://feeds.reuters.com/reuters/businessNews", source: "Reuters Business" },
+    { url: "https://feeds.reuters.com/reuters/companyNews", source: "Reuters Companies" },
+    // Barron's
+    { url: "https://www.barrons.com/xml/rss/3_7614.xml", source: "Barron's" },
+    // Seeking Alpha (public feed)
+    { url: "https://seekingalpha.com/feed.xml", source: "Seeking Alpha" },
+    // Financial Times
+    { url: "https://www.ft.com/rss/home/uk", source: "Financial Times" },
+    // WSJ additional
+    { url: "https://feeds.a.dj.com/rss/RSSWorldNews.xml", source: "WSJ World" },
+    { url: "https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml", source: "WSJ Business" },
   ];
 
   async fetchArticles(): Promise<RawArticle[]> {
@@ -63,7 +86,7 @@ export class RSSProvider implements DataSourceProvider {
         const text = await response.text();
         const items = text.match(/<item[\s\S]*?<\/item>/g) ?? [];
 
-        for (const item of items.slice(0, 15)) {
+        for (const item of items.slice(0, 25)) {
           const titleMatch = item.match(/<title[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title[^>]*>([\s\S]*?)<\/title>/);
           const linkMatch = item.match(/<link[^>]*>([\s\S]*?)<\/link>|<link[^>]*href="([^"]+)"/);
           const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);

@@ -5,7 +5,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertTriangle, ArrowLeft, Calendar, ExternalLink, Target, Users,
-  TrendingDown, TrendingUp, Minus, Zap, Activity, AlertOctagon, BarChart3
+  TrendingDown, TrendingUp, Minus, Zap, Activity, AlertOctagon, BarChart3,
+  CheckCircle, AlertCircle, BarChart2
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -226,6 +227,86 @@ export default function ArticleDetail() {
                     <CreditMetricBadge label="FORCED SELLING" active={!!article.forcedSellingRisk} color="red" />
                     <CreditMetricBadge label="DISTRESSED" active={!!article.distressedRisk} color="red" />
                   </div>
+                </section>
+              )}
+
+              {/* Market Validation Section */}
+              {(article.marketValidationSignal || article.confidenceScore || article.hyETFMove !== null) && (
+                <section>
+                  <h2 className="text-sm font-bold text-muted-foreground font-mono flex items-center mb-3">
+                    <BarChart2 className="h-4 w-4 mr-2" />
+                    MARKET VALIDATION
+                  </h2>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {/* Validation Signal */}
+                    <div className={`p-3 rounded-lg border text-center ${
+                      article.marketValidationSignal === "confirmed" ? "bg-emerald-950/20 border-emerald-800/40" :
+                      article.marketValidationSignal === "mixed" ? "bg-yellow-950/20 border-yellow-800/40" :
+                      "bg-secondary/30 border-border"
+                    }`}>
+                      <div className="text-[10px] font-mono text-muted-foreground mb-1">SIGNAL</div>
+                      {article.marketValidationSignal === "confirmed" && (
+                        <div className="flex items-center justify-center gap-1 text-emerald-400 font-bold text-xs">
+                          <CheckCircle className="h-3 w-3" /> CONFIRMED
+                        </div>
+                      )}
+                      {article.marketValidationSignal === "mixed" && (
+                        <div className="flex items-center justify-center gap-1 text-yellow-500 font-bold text-xs">
+                          <AlertCircle className="h-3 w-3" /> DIVERGENCE
+                        </div>
+                      )}
+                      {article.marketValidationSignal === "unconfirmed" && (
+                        <div className="text-muted-foreground text-xs">UNCONFIRMED</div>
+                      )}
+                      {!article.marketValidationSignal && (
+                        <div className="text-muted-foreground text-xs">N/A</div>
+                      )}
+                    </div>
+
+                    {/* Confidence Score */}
+                    <div className={`p-3 rounded-lg border text-center ${
+                      article.confidenceScore === "high" ? "bg-emerald-950/20 border-emerald-800/40" :
+                      article.confidenceScore === "medium" ? "bg-amber-950/20 border-amber-800/40" :
+                      "bg-secondary/30 border-border"
+                    }`}>
+                      <div className="text-[10px] font-mono text-muted-foreground mb-1">CONFIDENCE</div>
+                      <div className={`font-bold text-xs uppercase ${
+                        article.confidenceScore === "high" ? "text-emerald-400" :
+                        article.confidenceScore === "medium" ? "text-amber-400" :
+                        "text-muted-foreground"
+                      }`}>{article.confidenceScore ?? "N/A"}</div>
+                    </div>
+
+                    {/* Stock Move 1D */}
+                    <div className="p-3 rounded-lg border border-border bg-secondary/30 text-center">
+                      <div className="text-[10px] font-mono text-muted-foreground mb-1">STOCK 1D</div>
+                      {article.stockMove1D !== null && article.stockMove1D !== undefined ? (
+                        <div className={`flex items-center justify-center gap-1 font-bold text-xs ${article.stockMove1D < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                          {article.stockMove1D < 0 ? <TrendingDown className="h-3 w-3" /> : <TrendingUp className="h-3 w-3" />}
+                          {article.stockMove1D.toFixed(2)}%
+                        </div>
+                      ) : <div className="text-muted-foreground text-xs">N/A</div>}
+                    </div>
+
+                    {/* HYG ETF Move */}
+                    <div className="p-3 rounded-lg border border-border bg-secondary/30 text-center">
+                      <div className="text-[10px] font-mono text-muted-foreground mb-1">HYG 1D</div>
+                      {article.hyETFMove !== null && article.hyETFMove !== undefined ? (
+                        <div className={`flex items-center justify-center gap-1 font-bold text-xs ${article.hyETFMove < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                          {article.hyETFMove < 0 ? <TrendingDown className="h-3 w-3" /> : <TrendingUp className="h-3 w-3" />}
+                          {article.hyETFMove.toFixed(2)}%
+                        </div>
+                      ) : <div className="text-muted-foreground text-xs">N/A</div>}
+                    </div>
+                  </div>
+
+                  {/* Divergence explanation */}
+                  {article.marketValidationSignal === "mixed" && (
+                    <div className="mt-3 p-3 rounded-lg border border-yellow-800/40 bg-yellow-950/10 text-xs text-yellow-500">
+                      <AlertCircle className="h-3 w-3 inline mr-1" />
+                      <span className="font-bold">Divergence Detected:</span> Market price action does not confirm the news sentiment. Treat signal with caution — could indicate the market has priced in the news, or the credit market is lagging equity moves.
+                    </div>
+                  )}
                 </section>
               )}
 
