@@ -10,6 +10,7 @@ import ArticleDetail from "@/pages/article";
 import Signals from "@/pages/signals";
 import Brief from "@/pages/brief";
 import Issuers from "@/pages/issuers";
+import IssuerDetail from "@/pages/issuer-detail";
 import Sectors from "@/pages/sectors";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/signals" component={Signals} />
       <Route path="/brief" component={Brief} />
       <Route path="/issuers" component={Issuers} />
+      <Route path="/issuer/:name" component={IssuerDetail} />
       <Route component={NotFound} />
     </Switch>
   );

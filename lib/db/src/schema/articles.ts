@@ -89,6 +89,11 @@ export const articlesTable = pgTable("articles", {
     cloImpact: string;
   }>(),
 
+  // Content depth tracking
+  rawSnippet: text("raw_snippet"),                         // original RSS description before enrichment
+  contentDepthScore: integer("content_depth_score"),       // 0-100: richer content = higher score
+  contentSourceType: text("content_source_type"),          // "rss_snippet" | "expanded_article" | "api_fulltext"
+
   processedAt: timestamp("processed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, articlesTable } from "@workspace/db";
 import { ListIssuersResponse } from "@workspace/api-zod";
-import { isNotNull } from "drizzle-orm";
+import { isNotNull, eq, desc } from "drizzle-orm";
 import { buildIssuerSnapshot, enrichArticle } from "../lib/intelligence";
 
 const router: IRouter = Router();
@@ -56,6 +56,97 @@ router.get("/issuers", async (_req, res): Promise<void> => {
     .sort((a, b) => b.riskScore - a.riskScore);
 
   res.json(ListIssuersResponse.parse({ issuers, total: issuers.length }));
+});
+
+router.get("/issuers/:name", async (req, res): Promise<void> => {
+  const issuerName = decodeURIComponent(req.params.name);
+
+  const issuerArticles = await db
+    .select()
+    .from(articlesTable)
+    .where(eq(articlesTable.issuerName, issuerName))
+    .orderBy(desc(articlesTable.publishedAt));
+
+  if (issuerArticles.length === 0) {
+    res.status(404).json({ error: "Issuer not found" });
+    return;
+  }
+
+  const universe = await db
+    .select()
+    .from(articlesTable)
+    .where(isNotNull(articlesTable.processedAt))
+    .orderBy(desc(articlesTable.publishedAt))
+    .limit(300);
+
+  const enriched = issuerArticles.map((a) => enrichArticle(a, universe));
+  const snapshot = buildIssuerSnapshot(issuerName, issuerArticles);
+
+  const maxUrgency = Math.max(...enriched.map((a) => a.finalUrgencyScore ?? a.urgencyScore ?? 0));
+  const negativeCount = enriched.filter((a) => a.sentiment === "negative").length;
+  const covenantFlag = enriched.some((a) => a.covenantFlag);
+
+  const tradeImplications = enriched
+    .filter((a) => a.potentialTrades?.length || a.tradeRationale)
+    .sort((a, b) => (b.finalUrgencyScore ?? 0) - (a.finalUrgencyScore ?? 0))
+    .slice(0, 5)
+    .map((a) => ({
+      articleId: a.id,
+      title: a.title,
+      publishedAt: a.publishedAt,
+      tradeDirection: a.tradeDirection,
+      tradeRationale: a.tradeRationale,
+      potentialTrades: a.potentialTrades ?? [],
+      marketsImpacted: a.marketsImpacted ?? [],
+      finalUrgencyScore: a.finalUrgencyScore,
+    }));
+
+  const creditSummaries = enriched
+    .filter((a) => a.creditSummaryJson)
+    .sort((a, b) => (b.finalUrgencyScore ?? 0) - (a.finalUrgencyScore ?? 0))
+    .slice(0, 3)
+    .map((a) => ({
+      articleId: a.id,
+      title: a.title,
+      publishedAt: a.publishedAt,
+      creditSummary: a.creditSummaryJson,
+      scoreExplanation: a.scoreExplanationJson,
+      signalCard: a.signalCard,
+      urgency: a.finalUrgencyScore,
+    }));
+
+  res.json({
+    issuerName,
+    snapshot,
+    totalArticles: issuerArticles.length,
+    negativeCount,
+    covenantFlag,
+    maxUrgency,
+    articles: enriched.map((a) => ({
+      id: a.id,
+      title: a.title,
+      source: a.source,
+      publishedAt: a.publishedAt,
+      url: a.url,
+      summary: a.summary,
+      sector: a.sector,
+      eventType: a.eventType,
+      sentiment: a.sentiment,
+      urgencyScore: a.urgencyScore,
+      finalUrgencyScore: a.finalUrgencyScore,
+      covenantFlag: a.covenantFlag,
+      ratingMentioned: a.ratingMentioned,
+      ratingAgency: a.ratingAgency,
+      marketImpact: a.marketImpact,
+      tradeDirection: a.tradeDirection,
+      signalStrength: a.signalStrength,
+      trustProfile: a.trustProfile,
+      signalCard: a.signalCard,
+      creditSummaryJson: a.creditSummaryJson,
+    })),
+    tradeImplications,
+    creditSummaries,
+  });
 });
 
 export default router;

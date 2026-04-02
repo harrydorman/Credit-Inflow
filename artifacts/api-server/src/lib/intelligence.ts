@@ -65,28 +65,52 @@ export interface CreditPulse {
 
 const SOURCE_REGISTRY: Array<{ match: string[]; profile: SourceProfile }> = [
   {
-    match: ["sec", "sec filing", "sec.gov", "8-k", "10-q", "10-k", "company release", "press release", "investor relations", "earnings call", "transcript"],
-    profile: { displayName: "Primary filing / issuer disclosure", tier: "primary", lowCostPriority: 1, notes: "Cheapest reliable truth layer. Expand here first." },
+    match: ["sec", "sec filing", "sec.gov", "8-k", "10-q", "10-k", "company release", "investor relations", "earnings call", "transcript"],
+    profile: { displayName: "Primary filing / issuer disclosure", tier: "primary", lowCostPriority: 1, notes: "Cheapest reliable truth layer." },
   },
   {
-    match: ["moody", "moodys", "fitch", "s&p", "standardandpoors"],
-    profile: { displayName: "Ratings agency", tier: "primary", lowCostPriority: 3, notes: "Very high value later, but expensive for broad coverage." },
+    match: ["businesswire", "business wire", "prnewswire", "pr newswire", "globenewswire", "globe newswire", "press release"],
+    profile: { displayName: "Press release wire", tier: "primary", lowCostPriority: 1, notes: "Issuer-originating disclosure; treat as company statement." },
   },
   {
-    match: ["federal reserve", "treasury", "treasury.gov", "federalreserve"],
-    profile: { displayName: "Government / central bank", tier: "primary", lowCostPriority: 2, notes: "Excellent low-cost macro layer." },
+    match: ["moody", "moodys", "fitch", "s&p", "standardandpoors", "kbra", "dbrs"],
+    profile: { displayName: "Ratings agency", tier: "primary", lowCostPriority: 3, notes: "Very high value for rating action confirmation." },
   },
   {
-    match: ["reuters", "bloomberg", "wall street journal", "wsj", "financial times", "ft"],
-    profile: { displayName: "Institutional-quality media", tier: "secondary", lowCostPriority: 2, notes: "High-quality secondary confirmation." },
+    match: ["federal reserve", "treasury", "treasury.gov", "federalreserve", "bis.org", "imf.org", "ecb.europa.eu"],
+    profile: { displayName: "Government / central bank", tier: "primary", lowCostPriority: 2, notes: "Authoritative macro layer." },
   },
   {
-    match: ["marketwatch", "cnbc", "new york times"],
-    profile: { displayName: "Broad financial media", tier: "secondary", lowCostPriority: 4, notes: "Useful for breadth; facts should still be corroborated." },
+    match: ["reuters", "bloomberg", "wall street journal", "wsj.com", "wsj ", "financial times", "ft.com", " ft "],
+    profile: { displayName: "Wire / institutional media", tier: "secondary", lowCostPriority: 2, notes: "Wire-standard verification; high reliability." },
+  },
+  {
+    match: ["barron", "barrons", "barron's"],
+    profile: { displayName: "Barron's (institutional quality)", tier: "secondary", lowCostPriority: 2, notes: "Dow Jones flagship investment periodical." },
+  },
+  {
+    match: ["marketwatch", "market watch"],
+    profile: { displayName: "MarketWatch", tier: "secondary", lowCostPriority: 3, notes: "Dow Jones / WSJ Media Group; solid credit and bond coverage." },
+  },
+  {
+    match: ["cnbc"],
+    profile: { displayName: "CNBC", tier: "secondary", lowCostPriority: 3, notes: "Broad financial TV network; useful for breaking news confirmation." },
+  },
+  {
+    match: ["yahoo finance", "yahoo! finance", "finance.yahoo"],
+    profile: { displayName: "Yahoo Finance", tier: "secondary", lowCostPriority: 4, notes: "Aggregates AP/Reuters wires; pricing and market-data reliable." },
+  },
+  {
+    match: ["new york times", "nytimes"],
+    profile: { displayName: "New York Times", tier: "secondary", lowCostPriority: 4, notes: "Good investigative depth; corroborate facts." },
+  },
+  {
+    match: ["seeking alpha", "seekingalpha"],
+    profile: { displayName: "Seeking Alpha", tier: "tertiary", lowCostPriority: 5, notes: "Contributor opinion; strong lead-gen but requires primary corroboration." },
   },
   {
     match: ["investing.com"],
-    profile: { displayName: "Market website / tertiary", tier: "tertiary", lowCostPriority: 5, notes: "Use mainly as lead-generation, not final truth." },
+    profile: { displayName: "Investing.com", tier: "tertiary", lowCostPriority: 5, notes: "Market aggregator; use for market price leads only." },
   },
 ];
 

@@ -136,7 +136,7 @@ export default function Issuers() {
                       <TableRow
                         key={issuer.issuerName}
                         className={`cursor-pointer transition-colors border-b border-border/50 ${getRiskRowClass(issuer.riskScore, issuer.riskTrend)}`}
-                        onClick={() => setLocation(`/?issuerName=${encodeURIComponent(issuer.issuerName)}`)}
+                        onClick={() => setLocation(`/issuer/${encodeURIComponent(issuer.issuerName)}`)}
                       >
                         <TableCell className="font-mono font-bold text-base truncate max-w-[220px]" title={issuer.issuerName}>
                           {issuer.issuerName}

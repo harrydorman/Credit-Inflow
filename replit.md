@@ -4,14 +4,15 @@
 
 A full-stack Bloomberg-terminal-style web application for credit analysts, fixed income traders, CLO professionals, and portfolio managers. Aggregates financial news from 17 RSS feeds, processes with OpenAI via Replit AI proxy, and presents structured credit intelligence as a top-down workflow: Market Overview → Sectors → Issuers → Articles.
 
-## Navigation Hierarchy (Part 5 restructure)
+## Navigation Hierarchy
 
 - **`/`** — Market Overview (homepage): macro regime, risk summary, sector top risks, trend highlights
 - **`/feed`** — Live Feed: article stream with filters and trend sidebar
 - **`/sectors`** — Sector Analysis: clickable grid of all sectors, drills into article feed
-- **`/issuers`** — Issuer Intelligence: per-company risk tracking
+- **`/issuers`** — Issuer Intelligence: per-company risk table; rows click through to issuer detail
+- **`/issuer/:name`** — Issuer Detail: full per-issuer page with analyst snapshot, top credit signals, trade implications, article timeline
 - **`/signals`** — Trend Signals: full trend detection alerts
-- **`/brief`** — Daily Brief: top-10 credit events summary
+- **`/brief`** — Daily Brief: PM-note format with covenant alerts, critical events, issuer hotspots, macro trends
 - **`/article/:id`** — Article Detail: structured credit summary + scores with explanations
 
 ## Intelligence Layer (v2 — Credit-Inflow-improved)
@@ -97,14 +98,15 @@ artifacts-monorepo/
 
 ## API Endpoints (v0.3.0)
 
-- `GET /api/articles` — List articles (filters: sector, eventType, sentiment, issuerName, covenantFlag, marketImpact, minUrgency, limit, offset)
-- `GET /api/articles/:id` — Article detail with full AI analysis + all Phase 3 fields
+- `GET /api/articles` — List articles (filters: sector, eventType, sentiment, issuerName, covenantFlag, marketImpact, minUrgency, limit, offset). Uses DB-level ORDER BY + LIMIT/OFFSET for performance; corroboration universe capped at 300 recent processed articles.
+- `GET /api/articles/:id` — Article detail. Fetches single row by ID, then fetches limited universe for corroboration (no full-table scan).
 - `GET /api/signals` — Aggregated credit signals by sector and event type
-- `GET /api/signals/daily-brief` — Daily brief with covenantAlerts + criticalAlerts
+- `GET /api/signals/daily-brief` — Daily brief with covenantAlerts + criticalAlerts + issuerHotspots (IssuerSnapshot[]) + creditPulse
 - `GET /api/issuers` — Issuer risk aggregation with riskTrend + creditSignalTotal
+- `GET /api/issuers/:name` — Issuer detail: snapshot + enriched articles + tradeImplications + creditSummaries. Powers `/issuer/:name` frontend page.
 - `GET /api/issuer-thesis/:issuer` — AI-generated credit thesis for a specific issuer
 - `GET /api/trends` — Trend cluster detection (72h window, 4 alert types)
-- `POST /api/refresh` — Trigger news ingestion + AI processing (with noise filter)
+- `POST /api/refresh` — Trigger news ingestion + AI processing with content enricher (timeout-bounded fetch, RSS fallback if fetch fails)
 
 ## Key Features
 
@@ -143,11 +145,17 @@ artifacts-monorepo/
 - **Trend Alerts Panel** — live 72h trend cluster detection in sidebar
 - **Article Detail** — Urgency Meter (10-segment visual), Trade Implications card, Credit Signal Flags, CLO Deep Analysis
 
-## Database Schema (articles table)
+## Database Schema
 
+### articles table
 Phase 1: id, title, source, publishedAt, url, rawContent, summary, sector, eventType, sentiment, whyItMatters, whoCares, cloImpact, issuerName, urgencyScore, covenantFlag, ratingMentioned, ratingAgency, marketImpact
 
 Phase 3 additions: finalUrgencyScore, creditSignalScore, tradeDirection, tradeRationale, potentialTrades (json[]), marketsImpacted (json[]), leverageMentioned, liquidityConcern, refinancingRisk, earningsMiss, ratingIsDowngrade, ratingIsUpgrade, ratingIsCCCThreshold, covenantType, cloRelevance, cloLoanVsBond, cloWarfImpact, cloCCCBucketRisk, cloExplanation, cloImpactTypes (json[]), spreadWideningRisk, forcedSellingRisk, distressedRisk
+
+Content enrichment additions: rawSnippet (original RSS description before fetch attempt), contentSourceType ("rss_snippet" | "expanded_article" | "api_fulltext"), contentDepthScore (0-100 depth quality score)
+
+### issuer_snapshots table (new)
+id, issuerName, sector, riskLevel, trend, riskScore, articleCount, negativeSignalRatio, dominantSignal, summary, keyDrivers (json[]), keyRisks (json[]), computedAt
 
 ## Running Codegen (after OpenAPI spec changes)
 

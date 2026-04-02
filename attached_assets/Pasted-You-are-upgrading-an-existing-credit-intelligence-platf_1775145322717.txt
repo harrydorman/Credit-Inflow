@@ -1,0 +1,123 @@
+You are upgrading an existing credit intelligence platform from a strong MVP into a serious, investor-ready product.
+
+Product wedge:
+“AI-powered detection of credit deterioration, with evidence and actionable insight.”
+
+Current strengths already in the repo:
+- structured AI extraction
+- trust/evidence scoring
+- signal ranking
+- issuer snapshot logic
+- scheduled ingestion
+- daily brief and signal routes
+- article detail trust/evidence/trade UI
+
+Your task is NOT to rewrite the app from scratch.
+Your task is to harden the current architecture and close the biggest gaps that keep this from feeling institutional.
+
+Implementation priorities, in order:
+
+1. Source quality / content depth
+- Add a lightweight content expansion layer for high-value sources before AI analysis
+- Try to fetch article body text from the article URL for Reuters, MarketWatch, CNBC, FT, Barron’s, WSJ, Yahoo Finance where feasible
+- Keep RSS description as fallback only
+- Store:
+  - rawSnippet
+  - rawContent
+  - contentDepthScore
+  - contentSourceType (rss_snippet | expanded_article | api_fulltext)
+- Make the fetcher safe, low-cost, timeout-bounded, and failure-tolerant
+
+2. Source registry hardening
+- Update SOURCE_REGISTRY / getSourceProfile so all currently ingested sources are explicitly classified:
+  - Reuters
+  - Bloomberg
+  - WSJ
+  - FT
+  - Barron’s
+  - CNBC
+  - Yahoo Finance
+  - MarketWatch
+  - Seeking Alpha
+  - ratings agencies
+  - Fed/Treasury
+- Do not let common ingested sources silently fall back to generic tertiary if they should be explicitly mapped
+- Update trust logic accordingly
+
+3. Auditability / score transparency
+- Surface scoreExplanationJson in the article detail page
+- Add a collapsible “WHY THIS SCORE” panel
+- Show:
+  - credit risk reasoning
+  - market signal reasoning
+  - CLO impact reasoning
+- Keep the UI readable and institutional, not flashy
+
+4. Issuer workflow
+- Build a real issuer detail route/page instead of relying on /?issuerName=
+- Add:
+  - issuer timeline
+  - latest signals
+  - trust-weighted evidence summary
+  - recent trade implications
+  - issuer trend over time
+  - issuer snapshot summary
+- Update the issuers table click behavior to route to this real issuer page
+
+5. Daily Brief / dashboard upgrade
+- Upgrade the brief page so it uses the richer API response:
+  - creditPulse
+  - issuerHotspots
+  - covenantAlerts
+  - cloAlerts
+  - criticalAlerts
+- Make the Daily Brief read like a top-of-day PM note, not just a list page
+
+6. Performance / scaling fixes
+- Refactor /articles and related routes to avoid loading all rows and sorting/slicing in memory
+- Push sorting, filtering, limit, and offset into the DB query where possible
+- Keep enrichArticle behavior correct, but avoid unnecessary full-table scans
+- Add comments where future precomputation/materialization should be introduced
+
+7. Architecture prep for institutional scale
+- Introduce a first-pass normalized model for:
+  - source_documents
+  - evidence_records
+  - credit_signals
+  - issuer_snapshots
+- Do not fully migrate the whole app yet if that is too risky
+- Instead, add the new schema/models and begin writing to them in parallel where practical
+- Preserve compatibility with the current articles-based frontend
+
+Engineering instructions:
+- Inspect the current codebase first and map where each change should go
+- Make changes in batches:
+  1) backend source/content/trust changes
+  2) backend route/performance changes
+  3) frontend issuer/article/brief UI changes
+  4) schema/model additions
+- After each batch:
+  - run typecheck/build if available
+  - fix errors before proceeding
+- Do not claim success without validation
+- Keep a running changelog in IMPLEMENTATION_NOTES.md with:
+  - files changed
+  - architectural decisions
+  - assumptions
+  - unresolved limitations
+  - recommended next steps
+
+Guardrails:
+- Preserve existing working behavior unless replacing it with a better version
+- Prefer small safe changes over speculative rewrites
+- Keep costs low
+- Maintain a clear migration path to premium data providers later
+- Do not remove current trust/evidence/signal functionality
+
+Final deliverable:
+Return:
+1. Plan
+2. Files changed
+3. Validation results
+4. Remaining limitations
+5. Top 5 next steps after this implementation

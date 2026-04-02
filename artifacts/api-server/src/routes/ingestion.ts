@@ -6,6 +6,7 @@ import { fetchAllArticles } from "../lib/dataProviders";
 import { analyzeArticle, passesNoiseFilter } from "../lib/aiProcessing";
 import { getETFSnapshot, validateWithMarketData } from "../lib/marketData";
 import { logger } from "../lib/logger";
+import { enrichContent } from "../lib/contentEnricher";
 
 const router: IRouter = Router();
 
@@ -39,7 +40,14 @@ router.post("/refresh", async (req, res): Promise<void> => {
 
     for (const raw of newArticles) {
       try {
-        if (!passesNoiseFilter(raw.title, raw.rawContent)) {
+        const rawSnippet = raw.rawContent ?? "";
+        const enriched = await enrichContent(raw.url, raw.source, rawSnippet).catch(() => ({
+          rawContent: rawSnippet,
+          contentSourceType: "rss_snippet" as const,
+          contentDepthScore: Math.min(30, Math.floor(rawSnippet.length / 10)),
+        }));
+
+        if (!passesNoiseFilter(raw.title, enriched.rawContent)) {
           noiseFiltered++;
           req.log.info(
             { title: raw.title.slice(0, 70), source: raw.source },
@@ -50,13 +58,16 @@ router.post("/refresh", async (req, res): Promise<void> => {
             source: raw.source,
             publishedAt: raw.publishedAt,
             url: raw.url,
-            rawContent: raw.rawContent,
+            rawSnippet,
+            rawContent: enriched.rawContent,
+            contentSourceType: enriched.contentSourceType,
+            contentDepthScore: enriched.contentDepthScore,
             processedAt: null,
           });
           continue;
         }
 
-        const analysis = await analyzeArticle(raw.title, raw.rawContent);
+        const analysis = await analyzeArticle(raw.title, enriched.rawContent);
 
         let marketValidation = null;
         if (analysis) {
@@ -82,7 +93,10 @@ router.post("/refresh", async (req, res): Promise<void> => {
           source: raw.source,
           publishedAt: raw.publishedAt,
           url: raw.url,
-          rawContent: raw.rawContent,
+          rawSnippet,
+          rawContent: enriched.rawContent,
+          contentSourceType: enriched.contentSourceType,
+          contentDepthScore: enriched.contentDepthScore,
 
           summary: analysis?.summary ?? null,
           sector: analysis?.sector ?? null,

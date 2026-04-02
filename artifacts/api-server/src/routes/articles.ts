@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, articlesTable } from "@workspace/db";
 import { ListArticlesQueryParams, GetArticleParams } from "@workspace/api-zod";
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, isNotNull, desc, count } from "drizzle-orm";
 import { enrichArticle } from "../lib/intelligence";
 
 const router: IRouter = Router();
@@ -14,6 +14,8 @@ router.get("/articles", async (req, res): Promise<void> => {
   }
 
   const { sector, eventType, sentiment, issuerName, covenantFlag, marketImpact, minUrgency, limit, offset } = query.data;
+  const lim = limit ?? 50;
+  const off = offset ?? 0;
 
   const conditions = [];
   if (sector) conditions.push(eq(articlesTable.sector, sector));
@@ -24,18 +26,29 @@ router.get("/articles", async (req, res): Promise<void> => {
   if (marketImpact) conditions.push(eq(articlesTable.marketImpact, marketImpact));
   if (minUrgency != null) conditions.push(gte(articlesTable.urgencyScore, minUrgency));
 
-  let dbQuery = db.select().from(articlesTable).$dynamic();
-  if (conditions.length > 0) dbQuery = dbQuery.where(and(...conditions));
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const allArticles = await dbQuery;
-  const total = allArticles.length;
-  const lim = limit ?? 50;
-  const off = offset ?? 0;
+  const [{ total }] = await db
+    .select({ total: count() })
+    .from(articlesTable)
+    .where(whereClause);
 
-  const articles = allArticles
-    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-    .slice(off, off + lim)
-    .map((article) => enrichArticle(article, allArticles));
+  const pageArticles = await db
+    .select()
+    .from(articlesTable)
+    .where(whereClause)
+    .orderBy(desc(articlesTable.publishedAt))
+    .limit(lim)
+    .offset(off);
+
+  const universe = await db
+    .select()
+    .from(articlesTable)
+    .where(isNotNull(articlesTable.processedAt))
+    .orderBy(desc(articlesTable.publishedAt))
+    .limit(300);
+
+  const articles = pageArticles.map((article) => enrichArticle(article, universe));
 
   res.json({ articles, total });
 });
@@ -48,15 +61,25 @@ router.get("/articles/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const allArticles = await db.select().from(articlesTable);
-  const article = allArticles.find((item) => item.id === params.data.id);
+  const [article] = await db
+    .select()
+    .from(articlesTable)
+    .where(eq(articlesTable.id, params.data.id))
+    .limit(1);
 
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
 
-  res.json(enrichArticle(article, allArticles));
+  const universe = await db
+    .select()
+    .from(articlesTable)
+    .where(isNotNull(articlesTable.processedAt))
+    .orderBy(desc(articlesTable.publishedAt))
+    .limit(300);
+
+  res.json(enrichArticle(article, universe));
 });
 
 export default router;
