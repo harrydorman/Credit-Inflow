@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db, articlesTable } from "@workspace/db";
-import { eq, isNotNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
+import { buildIssuerSnapshot, enrichArticle } from "../lib/intelligence";
 
 const OPENAI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1";
@@ -16,60 +17,73 @@ router.get("/issuer-thesis/:issuer", async (req, res): Promise<void> => {
     return;
   }
 
-  const articles = await db
-    .select()
-    .from(articlesTable)
-    .where(eq(articlesTable.issuerName, issuer));
-
+  const articles = await db.select().from(articlesTable).where(eq(articlesTable.issuerName, issuer));
   if (articles.length === 0) {
     res.status(404).json({ error: `No articles found for issuer: ${issuer}` });
     return;
   }
 
-  // Build context from all articles for this issuer
-  const context = articles
-    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-    .slice(0, 10)
-    .map((a, i) =>
-      `[${i + 1}] ${new Date(a.publishedAt).toISOString().slice(0, 10)} — ${a.title}\n` +
-      `Summary: ${a.summary ?? "N/A"}\n` +
-      `Sentiment: ${a.sentiment ?? "N/A"} | Event: ${a.eventType ?? "N/A"} | Urgency: ${a.finalUrgencyScore ?? a.urgencyScore ?? "N/A"}/10\n` +
-      `${a.covenantFlag ? "COVENANT FLAG ACTIVE. " : ""}${a.ratingMentioned ? `Rating: ${a.ratingMentioned} (${a.ratingAgency}). ` : ""}${a.whyItMatters ?? ""}`
-    )
-    .join("\n\n---\n\n");
+  const enriched = articles.map((article) => enrichArticle(article, articles)).sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+  const snapshot = buildIssuerSnapshot(issuer, enriched);
+  const negCount = enriched.filter((a) => a.sentiment === "negative").length;
+  const covenantCount = enriched.filter((a) => a.covenantFlag).length;
+  const maxUrgency = Math.max(...enriched.map((a) => a.finalUrgencyScore ?? a.urgencyScore ?? 0));
 
-  const negCount = articles.filter((a) => a.sentiment === "negative").length;
-  const covenantCount = articles.filter((a) => a.covenantFlag).length;
-  const maxUrgency = Math.max(...articles.map((a) => a.finalUrgencyScore ?? a.urgencyScore ?? 0));
+  const baseResponse = {
+    issuer,
+    creditView: snapshot.riskLevel === "high" ? "negative" : snapshot.riskLevel === "low" ? "positive" : "neutral",
+    summary: snapshot.summary,
+    keyDrivers: snapshot.keyDrivers,
+    risks: snapshot.keyRisks,
+    potentialOutlook:
+      snapshot.trend === "deteriorating"
+        ? "Bias toward wider spreads / weaker ratings trajectory unless operating or financing evidence improves."
+        : snapshot.trend === "improving"
+          ? "Conditions are stabilizing, but watch for confirmation in ratings, liquidity, and refinancing access."
+          : "Stable-to-cautious. Await clearer evidence on liquidity, maturities, and earnings follow-through.",
+    articleCount: enriched.length,
+    trustLabel: snapshot.trustLabel,
+    nextQuestions: snapshot.nextQuestions,
+  };
 
   if (!OPENAI_API_KEY) {
-    // Return a rule-based thesis when OpenAI is unavailable
-    const creditView = negCount / articles.length >= 0.6 ? "negative" : negCount / articles.length <= 0.3 ? "positive" : "neutral";
-    res.json({
-      issuer,
-      creditView,
-      summary: `Based on ${articles.length} articles. ${negCount} negative signals detected. ${covenantCount > 0 ? `${covenantCount} covenant breach(es) flagged.` : "No covenant issues detected."} Max urgency: ${maxUrgency}/10.`,
-      keyDrivers: articles.slice(0, 3).map((a) => a.summary ?? a.title),
-      risks: covenantCount > 0 ? [`Covenant breach risk (${covenantCount} instances)`] : ["Monitor for deterioration"],
-      potentialOutlook: creditView === "negative" ? "Negative — increased downgrade / spread widening risk" : "Stable — no immediate credit concern",
-      articleCount: articles.length,
-    });
+    res.json(baseResponse);
     return;
   }
 
-  const prompt = `You are a senior credit analyst covering ${issuer}. Based on the following recent news and credit signals, generate a structured credit thesis.
+  const context = enriched.slice(0, 12).map((a, i) =>
+    `[${i + 1}] ${new Date(a.publishedAt).toISOString().slice(0, 10)} | ${a.source} | trust=${a.trustProfile.trustScore}\n` +
+    `Title: ${a.title}\n` +
+    `Bottom line: ${a.signalCard.whyNow}\n` +
+    `Evidence: ${a.signalCard.keyEvidence.join("; ")}\n` +
+    `Implications: ${a.signalCard.creditImplications.join("; ")}\n`
+  ).join("\n---\n");
 
-Recent Intelligence (${articles.length} articles, ${negCount} negative, max urgency ${maxUrgency}/10):
+  const prompt = `You are a senior buy-side credit analyst writing a rolling issuer memo.
+Use ONLY the evidence provided. Do not invent leverage, liquidity, maturity, or spread facts.
+Be measured and explicit about uncertainty.
 
+Issuer snapshot:
+- issuer: ${issuer}
+- current risk level: ${snapshot.riskLevel}
+- trend: ${snapshot.trend}
+- trust label: ${snapshot.trustLabel}
+- negative articles: ${negCount}/${enriched.length}
+- covenant count: ${covenantCount}
+- max urgency: ${maxUrgency}/10
+- key drivers: ${snapshot.keyDrivers.join(" | ")}
+- key risks: ${snapshot.keyRisks.join(" | ")}
+
+Recent evidence:
 ${context}
 
-Generate a concise but highly technical credit thesis. Be specific — reference metrics, ratings, spreads, and covenant headroom where possible. Respond ONLY with valid JSON:
+Return ONLY valid JSON:
 {
   "creditView": "positive | negative | neutral",
-  "summary": "3-4 sentence credit thesis summary covering current credit quality, trajectory, and key risks",
-  "keyDrivers": ["3-5 bullet points explaining the main factors driving the credit view"],
-  "risks": ["3-5 specific downside risks: ratings, covenants, liquidity, refinancing, sector headwinds"],
-  "potentialOutlook": "6-12 month forward-looking view on spread direction, ratings trajectory, and key catalysts to watch"
+  "summary": "3-4 sentence issuer-level credit memo using only stated evidence",
+  "keyDrivers": ["3-5 issuer-specific drivers"],
+  "risks": ["3-5 concrete downside risks"],
+  "potentialOutlook": "6-12 month forward-looking view with explicit uncertainty where evidence is thin"
 }`;
 
   try {
@@ -82,15 +96,15 @@ Generate a concise but highly technical credit thesis. Be specific — reference
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
-        temperature: 0.2,
-        max_tokens: 800,
+        temperature: 0.15,
+        max_tokens: 700,
       }),
     });
 
     if (!response.ok) {
       const err = await response.text();
-      logger.error({ status: response.status, err }, "OpenAI error in thesis");
-      res.status(500).json({ error: "AI thesis generation failed" });
+      logger.error({ status: response.status, err }, "OpenAI error in issuer thesis");
+      res.json(baseResponse);
       return;
     }
 
@@ -105,10 +119,10 @@ Generate a concise but highly technical credit thesis. Be specific — reference
       potentialOutlook: string;
     };
 
-    res.json({ issuer, ...thesis, articleCount: articles.length });
+    res.json({ ...baseResponse, ...thesis });
   } catch (err) {
     logger.error({ err }, "Error generating issuer thesis");
-    res.status(500).json({ error: "Failed to generate thesis" });
+    res.json(baseResponse);
   }
 });
 

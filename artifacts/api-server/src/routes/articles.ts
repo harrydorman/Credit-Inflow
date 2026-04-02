@@ -1,12 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq, and, gte } from "drizzle-orm";
 import { db, articlesTable } from "@workspace/db";
-import {
-  ListArticlesQueryParams,
-  GetArticleParams,
-  ListArticlesResponse,
-  GetArticleResponse,
-} from "@workspace/api-zod";
+import { ListArticlesQueryParams, ListArticlesResponse, GetArticleParams, GetArticleResponse } from "@workspace/api-zod";
+import { and, eq, gte } from "drizzle-orm";
+import { enrichArticle } from "../lib/intelligence";
 
 const router: IRouter = Router();
 
@@ -29,9 +25,7 @@ router.get("/articles", async (req, res): Promise<void> => {
   if (minUrgency != null) conditions.push(gte(articlesTable.urgencyScore, minUrgency));
 
   let dbQuery = db.select().from(articlesTable).$dynamic();
-  if (conditions.length > 0) {
-    dbQuery = dbQuery.where(and(...conditions));
-  }
+  if (conditions.length > 0) dbQuery = dbQuery.where(and(...conditions));
 
   const allArticles = await dbQuery;
   const total = allArticles.length;
@@ -39,18 +33,11 @@ router.get("/articles", async (req, res): Promise<void> => {
   const off = offset ?? 0;
 
   const articles = allArticles
-    .sort(
-      (a, b) =>
-        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-    )
-    .slice(off, off + lim);
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    .slice(off, off + lim)
+    .map((article) => enrichArticle(article, allArticles));
 
-  res.json(
-    ListArticlesResponse.parse({
-      articles,
-      total,
-    })
-  );
+  res.json(ListArticlesResponse.parse({ articles, total }));
 });
 
 router.get("/articles/:id", async (req, res): Promise<void> => {
@@ -61,17 +48,15 @@ router.get("/articles/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const [article] = await db
-    .select()
-    .from(articlesTable)
-    .where(eq(articlesTable.id, params.data.id));
+  const allArticles = await db.select().from(articlesTable);
+  const article = allArticles.find((item) => item.id === params.data.id);
 
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
 
-  res.json(GetArticleResponse.parse(article));
+  res.json(GetArticleResponse.parse(enrichArticle(article, allArticles)));
 });
 
 export default router;

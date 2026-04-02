@@ -14,6 +14,20 @@ A full-stack Bloomberg-terminal-style web application for credit analysts, fixed
 - **`/brief`** — Daily Brief: top-10 credit events summary
 - **`/article/:id`** — Article Detail: structured credit summary + scores with explanations
 
+## Intelligence Layer (v2 — Credit-Inflow-improved)
+
+A new core module `artifacts/api-server/src/lib/intelligence.ts` provides evidence-weighted trust scoring and signal enrichment for every article:
+
+- **Source Registry** — classifies sources into primary (SEC, ratings agencies, Fed), secondary (Reuters, Bloomberg, WSJ), tertiary (investing.com) tiers
+- **`buildTrustProfile(article, universe)`** — computes 0-100 trust score + label (high/medium/low) from source tier, content depth, evidence count, corroboration, market validation, and signal age
+- **`buildEvidenceItems(article, universe)`** — structured evidence ledger (source, timing, rating, covenant, metric, corroboration, market items)
+- **`findCorroboratingArticles(article, universe)`** — matches related articles by issuer and event type within a 7-day window
+- **`buildSignalCard(article, universe)`** — creates actionable signal card: signalType, whyNow, keyEvidence, creditImplications, riskFlags, confidence, decisionUse
+- **`buildIssuerSnapshot(issuerName, articles)`** — per-issuer risk summary: trend (deteriorating/stable/improving), riskLevel, keyDrivers, keyRisks, nextQuestions
+- **`buildCreditPulse(articles)`** — market-wide CreditPulse: riskTone (Risk Off/Cautious/Balanced), highTrustSignals, corroboratedSignals, primarySourceSignals
+- **`enrichArticle(article, universe)`** — attaches all of the above to an article object; used by articles, signals, issuers, and issuerThesis routes
+- **`rankSignalStrength(article, universe)`** — composite rank combining urgency, creditSignalScore, trust, sentiment bias, and corroboration count
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

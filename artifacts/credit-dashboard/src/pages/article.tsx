@@ -201,6 +201,46 @@ export default function ArticleDetail() {
             </header>
 
             <main className="space-y-8">
+              {/* Trust + Evidence */}
+              <section>
+                <h2 className="text-sm font-bold text-muted-foreground font-mono mb-3 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4" />
+                  TRUST & EVIDENCE
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card>
+                    <CardHeader className="pb-2"><CardTitle className="text-[11px] font-mono text-muted-foreground">TRUST PROFILE</CardTitle></CardHeader>
+                    <CardContent className="space-y-2">
+                      <div className="text-2xl font-bold">{(article as any).trustProfile?.trustScore ?? "-"}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {(article as any).trustProfile?.trustLabel && <Badge variant="outline">{(article as any).trustProfile?.trustLabel.toUpperCase()}</Badge>}
+                        {(article as any).trustProfile?.sourceTier && <Badge variant="secondary">{(article as any).trustProfile?.sourceTier.toUpperCase()}</Badge>}
+                        {(article as any).trustProfile?.primarySourcePresent && <Badge variant="outline" className="text-emerald-400 border-emerald-800/40">PRIMARY SOURCE</Badge>}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {(article as any).signalCard?.decisionUse ?? "Use this as issuer-monitoring context."}
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="md:col-span-2">
+                    <CardHeader className="pb-2"><CardTitle className="text-[11px] font-mono text-muted-foreground">EVIDENCE LEDGER</CardTitle></CardHeader>
+                    <CardContent className="space-y-2">
+                      {((article as any).evidenceItems ?? []).slice(0, 6).map((item: any, idx: number) => (
+                        <div key={idx} className="flex items-start justify-between gap-3 border-b border-border/60 pb-2 last:border-b-0">
+                          <div>
+                            <div className="text-sm">{item.label}</div>
+                            <div className="text-[11px] font-mono text-muted-foreground">{item.type.toUpperCase()}</div>
+                          </div>
+                          <Badge variant="outline" className={item.confirmed ? "text-emerald-400 border-emerald-800/40" : "text-amber-400 border-amber-800/40"}>
+                            {item.confirmed ? "CONFIRMED" : "INFERRED"}
+                          </Badge>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              </section>
+
               {/* Structured Credit Summary (new) */}
               {article.creditSummaryJson ? (
                 <section>
