@@ -3,9 +3,10 @@ import { db, articlesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { buildIssuerSnapshot, enrichArticle } from "../lib/intelligence";
+import { config } from "../lib/config";
 
-const OPENAI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
-const OPENAI_BASE_URL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+const OPENAI_API_KEY = config.openai.apiKey;
+const OPENAI_BASE_URL = config.openai.baseUrl;
 
 const router: IRouter = Router();
 

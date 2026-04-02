@@ -1,4 +1,5 @@
 import { logger } from "./logger";
+import { config } from "./config";
 
 // ── Feed health tracking ──────────────────────────────────────────────────────
 export interface FeedHealthEntry {
@@ -186,7 +187,7 @@ export class RSSProvider implements DataSourceProvider {
 // ── NewsAPI Provider ──────────────────────────────────────────────────────────
 export class NewsAPIProvider implements DataSourceProvider {
   name = "NewsAPI";
-  private readonly apiKey = process.env.NEWS_API_KEY;
+  private readonly apiKey = config.newsApiKey;
   private readonly baseUrl = "https://newsapi.org/v2/everything";
 
   async fetchArticles(): Promise<RawArticle[]> {

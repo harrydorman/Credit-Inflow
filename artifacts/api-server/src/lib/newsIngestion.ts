@@ -1,6 +1,7 @@
 import { logger } from "./logger";
+import { config } from "./config";
 
-const NEWS_API_KEY = process.env.NEWS_API_KEY;
+const NEWS_API_KEY = config.newsApiKey;
 const NEWS_API_URL = "https://newsapi.org/v2/everything";
 
 const CREDIT_KEYWORDS = [

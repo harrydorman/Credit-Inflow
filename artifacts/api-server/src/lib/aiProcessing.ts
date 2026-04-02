@@ -1,8 +1,9 @@
 import { logger } from "./logger";
 import { normalizeEventType } from "./eventNormalization";
+import { config } from "./config";
 
-const OPENAI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
-const OPENAI_BASE_URL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+const OPENAI_API_KEY = config.openai.apiKey;
+const OPENAI_BASE_URL = config.openai.baseUrl;
 
 const SECTORS = [
   "Retail", "Technology", "Energy", "Healthcare", "Real Estate",
