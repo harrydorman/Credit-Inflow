@@ -38,6 +38,12 @@ export interface SignalCard {
   decisionUse: string;
 }
 
+export interface SignalTimePoint {
+  date: string;
+  signalCount: number;
+  avgUrgency: number;
+}
+
 export interface IssuerSnapshot {
   issuerName: string;
   articleCount: number;
@@ -52,6 +58,7 @@ export interface IssuerSnapshot {
   keyDrivers: string[];
   keyRisks: string[];
   nextQuestions: string[];
+  signalTimeSeries: SignalTimePoint[];
 }
 
 export interface CreditPulse {
@@ -411,6 +418,29 @@ export function buildIssuerSnapshot(issuerName: string, articles: Article[]): Is
     ? latest.creditSummaryJson?.bottomLine || latest.whyItMatters || latest.summary || latest.title
     : `No recent intelligence for ${issuerName}.`;
 
+  // ── Signal time series (last 14 days, one bucket per day) ───────────────────
+  const now = new Date();
+  const signalTimeSeries: SignalTimePoint[] = [];
+  for (let i = 13; i >= 0; i--) {
+    const day = new Date(now);
+    day.setDate(day.getDate() - i);
+    const dateStr = day.toISOString().split("T")[0];
+    const dayArticles = sorted.filter((a) => {
+      const pub = new Date(a.publishedAt).toISOString().split("T")[0];
+      return pub === dateStr;
+    });
+    const avgUrgency =
+      dayArticles.length > 0
+        ? dayArticles.reduce((sum, a) => sum + (a.finalUrgencyScore ?? a.urgencyScore ?? 0), 0) /
+          dayArticles.length
+        : 0;
+    signalTimeSeries.push({
+      date: dateStr,
+      signalCount: dayArticles.length,
+      avgUrgency: Number(avgUrgency.toFixed(1)),
+    });
+  }
+
   return {
     issuerName,
     articleCount: sorted.length,
@@ -425,6 +455,7 @@ export function buildIssuerSnapshot(issuerName: string, articles: Article[]): Is
     keyDrivers: keyDrivers.length > 0 ? keyDrivers : [positiveCount > 0 ? "Mixed/offsetting developments across recent coverage" : "Monitoring for new issuer-specific developments"],
     keyRisks: keyRisks.length > 0 ? keyRisks : [riskLevel === "high" ? "Negative signals dominate recent flow" : "No immediate acute credit trigger surfaced"],
     nextQuestions: nextQuestions.length > 0 ? nextQuestions : ["What new evidence would materially change the credit view from here?"],
+    signalTimeSeries,
   };
 }
 

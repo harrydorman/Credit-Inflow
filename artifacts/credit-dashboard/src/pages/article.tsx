@@ -1,4 +1,5 @@
 import { useGetArticle } from "@workspace/api-client-react";
+import { decodeHtml } from "@/lib/decode-html";
 import { Layout } from "@/components/layout";
 import { useParams } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -155,7 +156,7 @@ export default function ArticleDetail() {
 
               <h1 className="text-3xl lg:text-4xl font-bold tracking-tight leading-tight mb-4 text-foreground">
                 {article.issuerName && <span className="text-primary">{article.issuerName}: </span>}
-                {article.title}
+                {decodeHtml(article.title)}
               </h1>
 
               {/* Quick score bar */}

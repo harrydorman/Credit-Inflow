@@ -1,4 +1,5 @@
 import { useGetDailyBrief, useListArticles, useGetTrends } from "@workspace/api-client-react";
+import { decodeHtml } from "@/lib/decode-html";
 import { Layout } from "@/components/layout";
 import { ArticleCard } from "@/components/article-card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -163,7 +164,7 @@ export default function Dashboard() {
                         <UrgencyBar score={urgency} />
                         <p className="text-xs font-semibold mt-2 line-clamp-2 leading-snug">
                           {article.issuerName && <span className="text-primary">{article.issuerName}: </span>}
-                          {article.title}
+                          {decodeHtml(article.title)}
                         </p>
                         <div className="flex flex-wrap gap-1 mt-2">
                           {article.covenantFlag && (

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, articlesTable } from "@workspace/db";
 import { count, sql } from "drizzle-orm";
+import { getFeedHealth } from "../lib/dataProviders";
 
 const router: IRouter = Router();
 
@@ -136,6 +137,31 @@ router.get("/debug/ingestion-stats", async (_req, res): Promise<void> => {
   } catch (err) {
     res.status(500).json({ error: "Failed to compute ingestion stats", detail: String(err) });
   }
+});
+
+// ── Feed health endpoint ──────────────────────────────────────────────────────
+router.get("/debug/feed-health", (_req, res): void => {
+  const feeds = getFeedHealth();
+
+  if (feeds.length === 0) {
+    res.json({
+      note: "No ingestion cycle has run since server start. Feed health is populated after the first /api/refresh call.",
+      feeds: [],
+    });
+    return;
+  }
+
+  const okCount = feeds.filter((f) => f.status === "ok").length;
+  const failingCount = feeds.filter((f) => f.status === "failing").length;
+  const summary = {
+    totalFeeds: feeds.length,
+    healthy: okCount,
+    failing: failingCount,
+    neverAttempted: feeds.filter((f) => f.status === "never_attempted").length,
+    healthPct: feeds.length > 0 ? Math.round((okCount / feeds.length) * 100) : null,
+  };
+
+  res.json({ summary, feeds });
 });
 
 export default router;

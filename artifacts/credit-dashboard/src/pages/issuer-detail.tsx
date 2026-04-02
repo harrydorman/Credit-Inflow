@@ -1,4 +1,5 @@
 import { useParams, Link } from "wouter";
+import { decodeHtml } from "@/lib/decode-html";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +24,12 @@ import { formatDistanceToNow, format } from "date-fns";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+interface SignalTimePoint {
+  date: string;
+  signalCount: number;
+  avgUrgency: number;
+}
+
 interface IssuerDetailData {
   issuerName: string;
   snapshot: {
@@ -36,6 +43,7 @@ interface IssuerDetailData {
     summary: string;
     keyDrivers: string[];
     keyRisks: string[];
+    signalTimeSeries?: SignalTimePoint[];
   };
   totalArticles: number;
   negativeCount: number;
@@ -139,6 +147,72 @@ function getUrgencyColor(score: number) {
   return "bg-secondary text-muted-foreground";
 }
 
+function SignalSparkline({ series }: { series: SignalTimePoint[] }) {
+  if (!series || series.length === 0) return null;
+  const W = 280;
+  const H = 44;
+  const PAD = 4;
+  const innerW = W - PAD * 2;
+  const innerH = H - PAD * 2;
+
+  const maxUrgency = Math.max(...series.map((p) => p.avgUrgency), 1);
+  const maxCount = Math.max(...series.map((p) => p.signalCount), 1);
+  const n = series.length;
+
+  const barW = innerW / n - 1;
+  const urgencyPoints = series
+    .map((p, i) => {
+      const x = PAD + i * (innerW / n) + barW / 2;
+      const y = PAD + innerH - (p.avgUrgency / maxUrgency) * innerH;
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  return (
+    <div>
+      <p className="text-[10px] font-mono text-muted-foreground mb-1">SIGNAL ACTIVITY · 14D</p>
+      <svg width={W} height={H} className="overflow-visible">
+        {series.map((p, i) => {
+          const x = PAD + i * (innerW / n);
+          const barH = (p.signalCount / maxCount) * innerH;
+          return (
+            <rect
+              key={p.date}
+              x={x + 0.5}
+              width={barW}
+              y={PAD + innerH - barH}
+              height={barH}
+              fill={p.signalCount > 0 ? "hsl(var(--primary) / 0.25)" : "transparent"}
+              rx={1}
+            />
+          );
+        })}
+        {series.some((p) => p.avgUrgency > 0) && (
+          <polyline
+            points={urgencyPoints}
+            fill="none"
+            stroke="hsl(var(--primary))"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        )}
+        {series.map((p, i) => {
+          if (p.avgUrgency === 0) return null;
+          const x = PAD + i * (innerW / n) + barW / 2;
+          const y = PAD + innerH - (p.avgUrgency / maxUrgency) * innerH;
+          return <circle key={p.date} cx={x} cy={y} r={2} fill="hsl(var(--primary))" />;
+        })}
+      </svg>
+      <div className="flex justify-between text-[9px] font-mono text-muted-foreground mt-0.5 w-[280px]">
+        <span>{series[0]?.date?.slice(5)}</span>
+        <span className="text-primary/70">AVG URGENCY TREND</span>
+        <span>{series[series.length - 1]?.date?.slice(5)}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function IssuerDetail() {
   const params = useParams<{ name: string }>();
   const name = decodeURIComponent(params.name ?? "");
@@ -203,23 +277,30 @@ export default function IssuerDetail() {
               </div>
             </div>
 
-            <div className="flex gap-6 text-right">
-              <div>
-                <div className="text-[10px] font-mono text-muted-foreground">ARTICLES</div>
-                <div className="text-2xl font-mono font-bold">{data.totalArticles}</div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-muted-foreground">NEGATIVE</div>
-                <div className={`text-2xl font-mono font-bold ${data.negativeCount > 0 ? "text-destructive" : "text-green-500"}`}>
-                  {data.negativeCount}
+            <div className="flex flex-wrap gap-6 items-start">
+              <div className="flex gap-6 text-right">
+                <div>
+                  <div className="text-[10px] font-mono text-muted-foreground">ARTICLES</div>
+                  <div className="text-2xl font-mono font-bold">{data.totalArticles}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-mono text-muted-foreground">NEGATIVE</div>
+                  <div className={`text-2xl font-mono font-bold ${data.negativeCount > 0 ? "text-destructive" : "text-green-500"}`}>
+                    {data.negativeCount}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-mono text-muted-foreground">MAX URGENCY</div>
+                  <div className={`text-2xl font-mono font-bold ${data.maxUrgency >= 7 ? "text-destructive" : data.maxUrgency >= 4 ? "text-amber-500" : ""}`}>
+                    {data.maxUrgency}/10
+                  </div>
                 </div>
               </div>
-              <div>
-                <div className="text-[10px] font-mono text-muted-foreground">MAX URGENCY</div>
-                <div className={`text-2xl font-mono font-bold ${data.maxUrgency >= 7 ? "text-destructive" : data.maxUrgency >= 4 ? "text-amber-500" : ""}`}>
-                  {data.maxUrgency}/10
+              {snapshot.signalTimeSeries && snapshot.signalTimeSeries.length > 0 && (
+                <div className="border-l border-border pl-6">
+                  <SignalSparkline series={snapshot.signalTimeSeries} />
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -288,7 +369,7 @@ export default function IssuerDetail() {
                   <CardContent className="p-5">
                     <div className="flex flex-wrap justify-between items-start gap-2 mb-3">
                       <Link href={`/article/${cs.articleId}`} className="font-bold hover:text-primary transition-colors text-base leading-snug max-w-xl">
-                        {cs.title}
+                        {decodeHtml(cs.title)}
                       </Link>
                       <div className="flex items-center gap-2 shrink-0">
                         {cs.urgency != null && (
@@ -354,7 +435,7 @@ export default function IssuerDetail() {
                 <div key={ti.articleId} className="rounded-lg border border-border bg-card p-4">
                   <div className="flex flex-wrap justify-between items-start gap-2 mb-2">
                     <Link href={`/article/${ti.articleId}`} className="font-semibold hover:text-primary transition-colors text-sm">
-                      {ti.title}
+                      {decodeHtml(ti.title)}
                     </Link>
                     <div className="flex items-center gap-2 shrink-0">
                       {ti.tradeDirection && (
@@ -415,7 +496,7 @@ export default function IssuerDetail() {
                       href={`/article/${article.id}`}
                       className="font-semibold hover:text-primary transition-colors block leading-snug"
                     >
-                      {article.title}
+                      {decodeHtml(article.title)}
                     </Link>
                     {article.summary && (
                       <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{article.summary}</p>

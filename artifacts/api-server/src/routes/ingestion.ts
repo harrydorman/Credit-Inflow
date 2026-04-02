@@ -3,7 +3,7 @@ import { and, eq, isNull, isNotNull } from "drizzle-orm";
 import { db, articlesTable } from "@workspace/db";
 import { TriggerRefreshResponse } from "@workspace/api-zod";
 import { fetchAllArticles } from "../lib/dataProviders";
-import { analyzeArticle, passesNoiseFilter } from "../lib/aiProcessing";
+import { analyzeArticle, passesNoiseFilter, isCreditTitleOverride } from "../lib/aiProcessing";
 import { getETFSnapshot, validateWithMarketData } from "../lib/marketData";
 import { logger } from "../lib/logger";
 import { enrichContent } from "../lib/contentEnricher";
@@ -59,7 +59,34 @@ router.post("/refresh", async (req, res): Promise<void> => {
           contentDepthScore: Math.min(30, Math.floor(rawSnippet.length / 10)),
         }));
 
-        const hasContent = (enriched.rawContent?.trim().length ?? 0) > 0;
+        let hasContent = (enriched.rawContent?.trim().length ?? 0) > 0;
+
+        // ── Title-triggered enrichment override ──────────────────────────────
+        // For high-value credit titles, retry enrichment with forceAttempt=true
+        // even if the source is normally on the skip list (e.g. WSJ, FT).
+        // This recovers articles where the RSS snippet was empty but the page
+        // is accessible.  We do NOT block ingestion if this also fails.
+        if (!hasContent && isCreditTitleOverride(raw.title)) {
+          req.log.info(
+            { title: raw.title.slice(0, 70), source: raw.source },
+            "Empty content + credit title override: forcing enrichment re-attempt"
+          );
+          const forced = await enrichContent(raw.url, raw.source, rawSnippet, true).catch(() => enriched);
+          if ((forced.rawContent?.trim().length ?? 0) > enriched.rawContent?.trim().length) {
+            Object.assign(enriched, forced);
+            hasContent = true;
+            req.log.info(
+              { title: raw.title.slice(0, 70), contentLen: forced.rawContent?.length },
+              "Title override enrichment succeeded"
+            );
+          } else {
+            req.log.info(
+              { title: raw.title.slice(0, 70) },
+              "Title override enrichment: still empty after force-attempt"
+            );
+          }
+        }
+
         if (!hasContent) {
           noiseFiltered++;
           req.log.info(
@@ -81,7 +108,9 @@ router.post("/refresh", async (req, res): Promise<void> => {
           continue;
         }
 
-        if (!passesNoiseFilter(raw.title, enriched.rawContent)) {
+        const noisePass = passesNoiseFilter(raw.title, enriched.rawContent);
+        const titleOverride = !noisePass && isCreditTitleOverride(raw.title);
+        if (!noisePass && !titleOverride) {
           noiseFiltered++;
           req.log.info(
             { title: raw.title.slice(0, 70), source: raw.source },
@@ -100,6 +129,12 @@ router.post("/refresh", async (req, res): Promise<void> => {
             processedAt: null,
           });
           continue;
+        }
+        if (titleOverride) {
+          req.log.info(
+            { title: raw.title.slice(0, 70), source: raw.source },
+            "Noise filter bypassed: credit title override triggered"
+          );
         }
 
         const analysis = await analyzeArticle(raw.title, enriched.rawContent);
@@ -310,13 +345,21 @@ router.post("/refresh/backfill", async (req, res): Promise<void> => {
 
     for (const article of unprocessed) {
       try {
-        if (!passesNoiseFilter(article.title, article.rawContent)) {
+        const noisePass = passesNoiseFilter(article.title, article.rawContent);
+        const titleOverride = !noisePass && isCreditTitleOverride(article.title);
+        if (!noisePass && !titleOverride) {
           skippedNoiseFilter++;
           req.log.info(
             { id: article.id, title: article.title.slice(0, 70) },
             "Backfill Phase 2: noise-filtered, skip"
           );
           continue;
+        }
+        if (titleOverride) {
+          req.log.info(
+            { id: article.id, title: article.title.slice(0, 70) },
+            "Backfill Phase 2: noise filter bypassed by credit title override"
+          );
         }
 
         const analysis = await analyzeArticle(article.title, article.rawContent);

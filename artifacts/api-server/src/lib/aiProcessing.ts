@@ -48,6 +48,35 @@ export function passesNoiseFilter(title: string, content: string | null): boolea
   return false;
 }
 
+// ── Credit title override ─────────────────────────────────────────────────────
+// Titles that contain high-value credit keywords or major credit-market firms
+// bypass the noise filter even when content is short.  The global threshold
+// is never lowered — this is a targeted allowlist, not a blanket loosening.
+const CREDIT_OVERRIDE_KEYWORDS = [
+  "credit", "clo", "private credit", "fund redemption",
+  "rate hike", "default", "downgrade", "leveraged loan",
+  "high yield", "junk bond", "maturity wall", "covenant",
+  "bankruptcy", "restructuring", "refinanc", "distressed",
+  "spread widen", "credit fund", "debt load", "loan fund",
+  "bond fund", "credit market", "credit spread", "debt capital",
+  "fixed income", "investment grade",
+];
+
+const CREDIT_OVERRIDE_FIRMS = [
+  "kkr", "goldman", "blackstone", "apollo", "ares", "blue owl",
+  "carlyle", "bain capital", "oaktree", "pimco", "blackrock",
+  "citadel", "cerberus", "fortress", "warburg", "sixth street",
+  "tiger global", "advent international", "the carlyle",
+];
+
+export function isCreditTitleOverride(title: string): boolean {
+  const lower = title.toLowerCase();
+  return (
+    CREDIT_OVERRIDE_KEYWORDS.some((kw) => lower.includes(kw)) ||
+    CREDIT_OVERRIDE_FIRMS.some((firm) => lower.includes(firm))
+  );
+}
+
 // ── Hybrid urgency scoring ────────────────────────────────────────────────────
 function computeFinalUrgencyScore(
   aiScore: number,

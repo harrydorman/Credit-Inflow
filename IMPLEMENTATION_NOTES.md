@@ -1,5 +1,127 @@
 # Credit Intelligence Dashboard — Implementation Notes
 
+---
+
+## Sprint: Signal Coverage & Data Quality (April 2, 2026 — Eve Sprint)
+
+### Priority 1 — Content Enrichment Override for Empty-Content Articles
+**File:** `artifacts/api-server/src/lib/contentEnricher.ts`
+- Added `forceAttempt = false` parameter to `enrichContent()`
+- When `forceAttempt=true`, bypasses the `SKIP_SOURCES` check (WSJ, FT, Barron's) and attempts full URL fetch
+- Hex entity decoding added to `stripHtml()`: handles `&#x2019;`, `&#39;`, `&#123;` and all numeric variants
+
+**File:** `artifacts/api-server/src/routes/ingestion.ts`
+- Added title-triggered enrichment override block:
+  - After initial enrichment returns empty content, checks `isCreditTitleOverride(title)`
+  - If match: re-attempts enrichment with `forceAttempt=true`
+  - Logs `"Empty content + credit title override: forcing enrichment re-attempt"` and `"Title override enrichment succeeded"` or `"Title override enrichment: still empty after force-attempt"`
+  - Falls through to `empty_content` classification if still empty — ingestion never blocked
+
+**Impact:** 3 previously `empty_content` articles recovered in first cycle
+
+---
+
+### Priority 2 — Noise Filter Precision (Credit Title Override)
+**File:** `artifacts/api-server/src/lib/aiProcessing.ts`
+- New exported function: `isCreditTitleOverride(title: string): boolean`
+- Two allowlists checked against lowercased title:
+  - **Keywords**: "credit", "clo", "private credit", "fund redemption", "rate hike", "default", "downgrade", "leveraged loan", "high yield", "junk bond", "maturity wall", "covenant", "bankruptcy", "restructuring", "refinanc", "distressed", "spread widen", "credit fund", "debt load", "loan fund", "bond fund", "credit market", "fixed income", "investment grade"
+  - **Firms**: "kkr", "goldman", "blackstone", "apollo", "ares", "blue owl", "carlyle", "bain capital", "oaktree", "pimco", "blackrock", "citadel", "cerberus", "fortress", "warburg", "sixth street"
+- Global `NOISE_FILTER_THRESHOLD` unchanged (still 2)
+
+**File:** `artifacts/api-server/src/routes/ingestion.ts` (Phase 1 — new articles)
+- Logic: `noisePass = passesNoiseFilter(...)`, `titleOverride = !noisePass && isCreditTitleOverride(...)`
+- Only classifies as `noise_filtered` when BOTH `noisePass=false` AND `titleOverride=false`
+- Logs `"Noise filter bypassed: credit title override triggered"` when override fires
+
+**File:** `artifacts/api-server/src/routes/ingestion.ts` (Phase 2 — backfill)
+- Same override logic applied in `POST /api/refresh/backfill` Phase 2 retry loop
+- Logs `"Backfill Phase 2: noise filter bypassed by credit title override"`
+
+**Impact:** 5 previously `noise_filtered` articles unlocked on first backfill cycle:
+- KKR caps redemptions in retail credit fund (id 18) — "kkr" match
+- KKR caps redemptions at one of its private credit funds (id 21) — "kkr" match
+- Markets now see the Fed's next move as a potential rate hike (id 34) — "rate hike" match
+- Berkeley shares tumble as housebuilder cuts profit forecast (id 48) — "credit" in content
+- Goldman Sachs Initiates Coverage of Smurfit Westrock (id 61) — "goldman" match
+
+---
+
+### Priority 3 — Feed Health Monitoring
+**File:** `artifacts/api-server/src/lib/dataProviders.ts`
+- New types: `FeedHealthEntry { feedName, lastAttempt, lastSuccess, lastFailure, lastError, consecutiveFailures, status }`
+- Module-level `feedHealthMap: Map<string, FeedHealthEntry>`
+- `markSuccess(feedName)` and `markFailure(feedName, err)` helper functions called after each feed attempt
+- `getFeedHealth(): FeedHealthEntry[]` exported — returns all feeds sorted by name
+
+**Wire-up:**
+- RSS `fetchArticles()` loop: `markSuccess(feed.source)` inside try, `markFailure(feed.source, err)` in catch
+- NewsAPI `fetchArticles()`: `markFailure("NewsAPI", "HTTP 401")` on non-OK response; `markSuccess("NewsAPI")` on success; `markFailure("NewsAPI", err)` in catch
+
+**File:** `artifacts/api-server/src/routes/debug.ts`
+- New route: `GET /api/debug/feed-health`
+- Returns: `{ summary: { totalFeeds, healthy, failing, neverAttempted, healthPct }, feeds: FeedHealthEntry[] }`
+- Returns informational message if no ingestion cycle has run yet
+
+**Current feed health:** 15 feeds tracked, 12 healthy (80%), 3 failing:
+- `NewsAPI` — HTTP 401 (invalid API key)
+- `Reuters Business` — ENOTFOUND feeds.reuters.com (DNS blocked)
+- `Reuters Companies` — ENOTFOUND feeds.reuters.com (DNS blocked)
+
+---
+
+### Priority 4 — Issuer Trend Visualization Support
+**File:** `artifacts/api-server/src/lib/intelligence.ts`
+- New interface: `SignalTimePoint { date: string, signalCount: number, avgUrgency: number }`
+- `IssuerSnapshot` extended with `signalTimeSeries: SignalTimePoint[]`
+- `buildIssuerSnapshot()`: computes 14-day time series — one bucket per day
+  - Buckets each article by `publishedAt.toISOString().split("T")[0]`
+  - Computes `avgUrgency` from `finalUrgencyScore ?? urgencyScore` per day bucket
+
+**File:** `artifacts/credit-dashboard/src/pages/issuer-detail.tsx`
+- `SignalTimePoint` interface added to frontend
+- `IssuerDetailData.snapshot.signalTimeSeries?: SignalTimePoint[]` field added
+- New `SignalSparkline({ series })` SVG component:
+  - 280×44px SVG with 4px padding
+  - Background bars: signal count per day (amber fill at 25% opacity)
+  - Foreground polyline: average urgency over time (amber #primary)
+  - Dot markers for non-zero urgency days
+  - Date labels at left/right (MM-DD format)
+  - Header: `SIGNAL ACTIVITY · 14D`
+- Rendered in issuer header, next to ARTICLES/NEGATIVE/MAX URGENCY stats, separated by a border
+
+---
+
+### Priority 5 — HTML Entity Decoding
+**Backend (new articles):**
+- `artifacts/api-server/src/lib/dataProviders.ts`: `decodeHtmlEntities()` helper function; applied to `title` and `description` in RSS parser
+- `artifacts/api-server/src/lib/contentEnricher.ts`: `stripHtml()` extended with hex entity patterns
+
+**Frontend (existing articles in DB):**
+- New utility: `artifacts/credit-dashboard/src/lib/decode-html.ts` — `decodeHtml(text)` function
+- Handles: `&#x2019;` → `'`, `&#x2018;` → `'`, `&#(\d+);`, `&amp;`, `&apos;`, `&quot;`, `&lt;`, `&gt;`, `&nbsp;`
+- Applied in: `article.tsx` (h1 title), `article-card.tsx` (h3 title), `brief.tsx` (3× alert.title, 1× event.title), `dashboard.tsx` (article title), `issuer-detail.tsx` (cs.title, ti.title, article.title)
+
+---
+
+### Validated State (End of Eve Sprint)
+| Check | Before | After |
+|---|---|---|
+| processed_ok | 52 | 59 |
+| noise_filtered | 19 | 22 (+3 new articles legitimately filtered) |
+| empty_content | 15 | 12 (−3 recovered by force enrichment) |
+| ai_null | 0 | 0 |
+| Issuers | 12 | 15 (+Blue Owl, Berkeley, Smurfit Westrock) |
+| Credit title override | — | 5 articles unlocked |
+| Feed health endpoint | — | 15 feeds, 12 ok, 3 failing |
+| signalTimeSeries | — | 14-day sparkline on all issuer pages |
+| HTML entity titles | &#x2019; rendered raw | Curly quotes, apostrophes correct |
+| 100% creditSummary | ✓ | ✓ |
+| 100% scoreExplanation | ✓ | ✓ |
+| potentialTrades coverage | 90% | 92% |
+
+---
+
 ## Sprint: Hardening Pass (April 2026)
 
 ---

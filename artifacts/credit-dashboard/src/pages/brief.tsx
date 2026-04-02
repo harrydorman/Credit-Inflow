@@ -1,4 +1,5 @@
 import { useGetDailyBrief } from "@workspace/api-client-react";
+import { decodeHtml } from "@/lib/decode-html";
 import { Layout } from "@/components/layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -127,7 +128,7 @@ export default function Brief() {
                             href={`/article/${alert.articleId}`}
                             className="text-lg font-bold hover:text-red-400 transition-colors"
                           >
-                            {alert.title}
+                            {decodeHtml(alert.title)}
                           </Link>
                           <p className="text-muted-foreground text-sm mt-2 line-clamp-2">{alert.summary}</p>
                         </div>
@@ -178,7 +179,7 @@ export default function Brief() {
                             href={`/article/${alert.articleId}`}
                             className="text-lg font-bold hover:text-orange-400 transition-colors"
                           >
-                            {alert.title}
+                            {decodeHtml(alert.title)}
                           </Link>
                           <p className="text-muted-foreground text-sm mt-2 line-clamp-2">{alert.summary}</p>
                         </div>
@@ -212,7 +213,7 @@ export default function Brief() {
                             href={`/article/${alert.articleId}`}
                             className="text-lg font-bold hover:text-primary transition-colors"
                           >
-                            {alert.title}
+                            {decodeHtml(alert.title)}
                           </Link>
                           <p className="text-muted-foreground text-sm mt-2 line-clamp-2">{alert.summary}</p>
                         </div>
@@ -302,7 +303,7 @@ export default function Brief() {
                           {event.issuerName ? (
                             <span className="font-bold mr-1">{event.issuerName}:</span>
                           ) : null}
-                          {event.title}
+                          {decodeHtml(event.title)}
                         </Link>
                         <div className="flex flex-wrap gap-2 text-xs font-mono text-muted-foreground">
                           {event.urgencyScore && (

@@ -1,5 +1,61 @@
 import { logger } from "./logger";
 
+// ── Feed health tracking ──────────────────────────────────────────────────────
+export interface FeedHealthEntry {
+  feedName: string;
+  lastAttempt: string | null;
+  lastSuccess: string | null;
+  lastFailure: string | null;
+  lastError: string | null;
+  consecutiveFailures: number;
+  status: "ok" | "failing" | "never_attempted";
+}
+
+const feedHealthMap = new Map<string, FeedHealthEntry>();
+
+function markSuccess(feedName: string): void {
+  const prev = feedHealthMap.get(feedName);
+  feedHealthMap.set(feedName, {
+    feedName,
+    lastAttempt: new Date().toISOString(),
+    lastSuccess: new Date().toISOString(),
+    lastFailure: prev?.lastFailure ?? null,
+    lastError: null,
+    consecutiveFailures: 0,
+    status: "ok",
+  });
+}
+
+function markFailure(feedName: string, err: unknown): void {
+  const prev = feedHealthMap.get(feedName);
+  feedHealthMap.set(feedName, {
+    feedName,
+    lastAttempt: new Date().toISOString(),
+    lastSuccess: prev?.lastSuccess ?? null,
+    lastFailure: new Date().toISOString(),
+    lastError: err instanceof Error ? err.message : String(err),
+    consecutiveFailures: (prev?.consecutiveFailures ?? 0) + 1,
+    status: "failing",
+  });
+}
+
+export function getFeedHealth(): FeedHealthEntry[] {
+  return Array.from(feedHealthMap.values()).sort((a, b) => a.feedName.localeCompare(b.feedName));
+}
+
+// ── HTML entity decode (titles from RSS can contain numeric / named entities) ─
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&amp;/g, "&")
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ");
+}
+
 export interface RawArticle {
   title: string;
   source: string;
@@ -92,11 +148,12 @@ export class RSSProvider implements DataSourceProvider {
           const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
           const descMatch = item.match(/<description[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/description>|<description[^>]*>([\s\S]*?)<\/description>/);
 
-          const title = (titleMatch?.[1] ?? titleMatch?.[2] ?? "").trim();
+          const title = decodeHtmlEntities((titleMatch?.[1] ?? titleMatch?.[2] ?? "").trim());
           const link = (linkMatch?.[1] ?? linkMatch?.[2] ?? "").trim();
           const pubDate = (dateMatch?.[1] ?? "").trim();
-          const description = (descMatch?.[1] ?? descMatch?.[2] ?? "").trim()
-            .replace(/<[^>]+>/g, "").trim();
+          const description = decodeHtmlEntities(
+            (descMatch?.[1] ?? descMatch?.[2] ?? "").trim().replace(/<[^>]+>/g, "").trim()
+          );
 
           if (!title || !link) continue;
 
@@ -115,8 +172,10 @@ export class RSSProvider implements DataSourceProvider {
             rawContent: description || null,
           });
         }
+        markSuccess(feed.source);
       } catch (err) {
         logger.warn({ err, feed: feed.source }, "RSS feed fetch failed");
+        markFailure(feed.source, err);
       }
     }
 
@@ -147,6 +206,7 @@ export class NewsAPIProvider implements DataSourceProvider {
         const response = await fetch(`${this.baseUrl}?${params}`);
         if (!response.ok) {
           logger.warn({ keyword, status: response.status }, "NewsAPI request failed");
+          markFailure("NewsAPI", `HTTP ${response.status}`);
           continue;
         }
 
@@ -168,9 +228,11 @@ export class NewsAPIProvider implements DataSourceProvider {
             rawContent: article.content ?? article.description ?? null,
           });
         }
+        markSuccess("NewsAPI");
         await new Promise((resolve) => setTimeout(resolve, 200));
       } catch (err) {
         logger.error({ err, keyword }, "NewsAPI fetch error");
+        markFailure("NewsAPI", err);
       }
     }
 

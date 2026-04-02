@@ -1,4 +1,5 @@
 import { Article } from "@workspace/api-client-react";
+import { decodeHtml } from "@/lib/decode-html";
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Link } from "wouter";
@@ -125,7 +126,7 @@ export function ArticleCard({ article }: { article: Article }) {
               {formatDistanceToNow(new Date(article.publishedAt), { addSuffix: true })}
             </div>
           </div>
-          <h3 className="font-semibold text-lg leading-tight text-card-foreground line-clamp-2 mt-1">{article.title}</h3>
+          <h3 className="font-semibold text-lg leading-tight text-card-foreground line-clamp-2 mt-1">{decodeHtml(article.title)}</h3>
         </CardHeader>
         <CardContent className="p-4 pt-0 space-y-3">
           <p className="text-sm text-muted-foreground line-clamp-3">

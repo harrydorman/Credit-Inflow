@@ -39,7 +39,10 @@ function stripHtml(html: string): string {
     .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/<[^>]+>/g, " ")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
     .replace(/&amp;/g, "&")
+    .replace(/&apos;/g, "'")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
@@ -82,11 +85,12 @@ export interface EnrichedContent {
 export async function enrichContent(
   url: string,
   source: string,
-  snippetContent: string
+  snippetContent: string,
+  forceAttempt = false
 ): Promise<EnrichedContent> {
   const snippet = snippetContent ?? "";
 
-  if (!isFetchable(url, source)) {
+  if (!forceAttempt && !isFetchable(url, source)) {
     return {
       rawContent: snippet,
       contentSourceType: "rss_snippet",
