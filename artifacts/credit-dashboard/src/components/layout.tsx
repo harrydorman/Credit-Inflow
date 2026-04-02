@@ -15,7 +15,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const res = await refreshMutation.mutateAsync({});
+      const res = await refreshMutation.mutateAsync();
       toast({
         title: "Data Ingestion Complete",
         description: `Fetched ${res.fetched}, Processed ${res.processed} articles.`,

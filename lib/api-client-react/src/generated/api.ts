@@ -16,6 +16,14 @@ import type {
   UseQueryResult,
 } from "@tanstack/react-query";
 
+// TanStack Query v5 made `queryKey` required inside the UseQueryOptions union.
+// The generated hooks set queryKey internally — callers should not need to provide it.
+// This alias restores the expected ergonomics without touching call sites.
+type HookQueryOptions<TData, TError, TResult> = Omit<
+  UseQueryOptions<TData, TError, TResult>,
+  "queryKey"
+> & { queryKey?: QueryKey };
+
 import type {
   Article,
   ArticleList,
@@ -66,7 +74,7 @@ export const getHealthCheckQueryOptions = <
   TData = Awaited<ReturnType<typeof healthCheck>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+  query?: HookQueryOptions<
     Awaited<ReturnType<typeof healthCheck>>,
     TError,
     TData
@@ -101,7 +109,7 @@ export function useHealthCheck<
   TData = Awaited<ReturnType<typeof healthCheck>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+  query?: HookQueryOptions<
     Awaited<ReturnType<typeof healthCheck>>,
     TError,
     TData
@@ -156,7 +164,7 @@ export const getListArticlesQueryOptions = <
 >(
   params?: ListArticlesParams,
   options?: {
-    query?: UseQueryOptions<
+    query?: HookQueryOptions<
       Awaited<ReturnType<typeof listArticles>>,
       TError,
       TData
@@ -194,7 +202,7 @@ export function useListArticles<
 >(
   params?: ListArticlesParams,
   options?: {
-    query?: UseQueryOptions<
+    query?: HookQueryOptions<
       Awaited<ReturnType<typeof listArticles>>,
       TError,
       TData
@@ -238,7 +246,7 @@ export const getGetArticleQueryOptions = <
 >(
   id: number,
   options?: {
-    query?: UseQueryOptions<
+    query?: HookQueryOptions<
       Awaited<ReturnType<typeof getArticle>>,
       TError,
       TData
@@ -281,7 +289,7 @@ export function useGetArticle<
 >(
   id: number,
   options?: {
-    query?: UseQueryOptions<
+    query?: HookQueryOptions<
       Awaited<ReturnType<typeof getArticle>>,
       TError,
       TData
@@ -322,7 +330,7 @@ export const getGetSignalsQueryOptions = <
   TData = Awaited<ReturnType<typeof getSignals>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+  query?: HookQueryOptions<
     Awaited<ReturnType<typeof getSignals>>,
     TError,
     TData
@@ -357,7 +365,7 @@ export function useGetSignals<
   TData = Awaited<ReturnType<typeof getSignals>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+  query?: HookQueryOptions<
     Awaited<ReturnType<typeof getSignals>>,
     TError,
     TData
@@ -397,7 +405,7 @@ export const getGetDailyBriefQueryOptions = <
   TData = Awaited<ReturnType<typeof getDailyBrief>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+  query?: HookQueryOptions<
     Awaited<ReturnType<typeof getDailyBrief>>,
     TError,
     TData
@@ -432,7 +440,7 @@ export function useGetDailyBrief<
   TData = Awaited<ReturnType<typeof getDailyBrief>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+  query?: HookQueryOptions<
     Awaited<ReturnType<typeof getDailyBrief>>,
     TError,
     TData
@@ -473,7 +481,7 @@ export const getListIssuersQueryOptions = <
   TData = Awaited<ReturnType<typeof listIssuers>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+  query?: HookQueryOptions<
     Awaited<ReturnType<typeof listIssuers>>,
     TError,
     TData
@@ -508,7 +516,7 @@ export function useListIssuers<
   TData = Awaited<ReturnType<typeof listIssuers>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+  query?: HookQueryOptions<
     Awaited<ReturnType<typeof listIssuers>>,
     TError,
     TData
@@ -551,7 +559,7 @@ export const getGetIssuerThesisQueryOptions = <
 >(
   issuer: string,
   options?: {
-    query?: UseQueryOptions<
+    query?: HookQueryOptions<
       Awaited<ReturnType<typeof getIssuerThesis>>,
       TError,
       TData
@@ -594,7 +602,7 @@ export function useGetIssuerThesis<
 >(
   issuer: string,
   options?: {
-    query?: UseQueryOptions<
+    query?: HookQueryOptions<
       Awaited<ReturnType<typeof getIssuerThesis>>,
       TError,
       TData
@@ -650,7 +658,7 @@ export const getGetTrendsQueryOptions = <
 >(
   params?: GetTrendsParams,
   options?: {
-    query?: UseQueryOptions<
+    query?: HookQueryOptions<
       Awaited<ReturnType<typeof getTrends>>,
       TError,
       TData
@@ -688,7 +696,7 @@ export function useGetTrends<
 >(
   params?: GetTrendsParams,
   options?: {
-    query?: UseQueryOptions<
+    query?: HookQueryOptions<
       Awaited<ReturnType<typeof getTrends>>,
       TError,
       TData
@@ -729,7 +737,7 @@ export const getGetMarketOverviewQueryOptions = <
   TData = Awaited<ReturnType<typeof getMarketOverview>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+  query?: HookQueryOptions<
     Awaited<ReturnType<typeof getMarketOverview>>,
     TError,
     TData
@@ -764,7 +772,7 @@ export function useGetMarketOverview<
   TData = Awaited<ReturnType<typeof getMarketOverview>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+  query?: HookQueryOptions<
     Awaited<ReturnType<typeof getMarketOverview>>,
     TError,
     TData
@@ -804,7 +812,7 @@ export const getGetTrendsDebugQueryOptions = <
   TData = Awaited<ReturnType<typeof getTrendsDebug>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+  query?: HookQueryOptions<
     Awaited<ReturnType<typeof getTrendsDebug>>,
     TError,
     TData
@@ -839,7 +847,7 @@ export function useGetTrendsDebug<
   TData = Awaited<ReturnType<typeof getTrendsDebug>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+  query?: HookQueryOptions<
     Awaited<ReturnType<typeof getTrendsDebug>>,
     TError,
     TData

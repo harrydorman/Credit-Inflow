@@ -388,7 +388,73 @@ Port resolution validates the parsed value and names which env var produced an i
 
 ---
 
-### Batch 4 — Documentation (This Batch)
+### Batch 5 — Typecheck and Build Tooling Reliability
+
+**Goal:** Make `pnpm typecheck` pass cleanly on a fresh clone, and expose root-level `typecheck`, `build`, and `setup` commands for monorepo-wide operations.
+
+**Root cause discovered:** The root `package.json` already had `typecheck:libs → typecheck` correctly wired. The actual failing point was 4 pre-existing TypeScript errors in `credit-dashboard` and the absence of a `pnpm setup` root alias.
+
+**Files changed:**
+
+**`package.json` (root)** — Added `setup` script:
+```json
+"setup": "bash scripts/setup.sh"
+```
+The root scripts are now: `preinstall`, `setup`, `build`, `typecheck:libs`, `typecheck`.
+
+**`lib/api-client-react/src/generated/api.ts`** — Added `HookQueryOptions` helper type and replaced all 20 `query?: UseQueryOptions<...>` occurrences:
+
+Root cause: TanStack Query v5.90 made `queryKey` required inside the `UseQueryOptions` union type (via a discriminated union where both branches require `queryKey`). The orval-generated hooks always set `queryKey` internally via `getXxxQueryOptions()`  — callers should never need to provide it. The generated type was overly strict.
+
+Fix: Added a helper type after the `@tanstack/react-query` import block:
+```typescript
+type HookQueryOptions<TData, TError, TResult> = Omit<
+  UseQueryOptions<TData, TError, TResult>,
+  "queryKey"
+> & { queryKey?: QueryKey };
+```
+Then applied `sed -i 's/query?: UseQueryOptions</query?: HookQueryOptions</g'` to replace all 20 occurrences. `UseQueryOptions` is still imported (used in the type alias definition). This change does not affect runtime behavior — it only fixes the type signature to match the actual calling convention.
+
+**`artifacts/credit-dashboard/src/components/layout.tsx`** — Removed empty `{}` argument from `mutateAsync`:
+```diff
+-const res = await refreshMutation.mutateAsync({});
++const res = await refreshMutation.mutateAsync();
+```
+`useTriggerRefresh` is typed `void` for its variable parameter. Passing `{}` is a type mismatch. Runtime behavior is identical.
+
+**`artifacts/credit-dashboard/src/pages/market-overview.tsx`** — Fixed `JSX.Element` type annotation:
+```diff
++import type { ReactElement } from "react";
+ ...
+-Record<string, { ...; icon: JSX.Element }>
++Record<string, { ...; icon: ReactElement }>
+```
+With the React 17+ automatic JSX transform, `import React` is not needed for JSX syntax, but `JSX.Element` as a type still requires the `JSX` namespace to be in scope. `ReactElement` from `'react'` is the equivalent explicit type.
+
+**Validation:**
+```
+pnpm typecheck
+
+> workspace@0.0.0 typecheck:libs — tsc --build         ← builds lib/*.d.ts
+artifacts/api-server       typecheck — Done in 5.9s  ✓
+artifacts/credit-dashboard typecheck — Done in 9.4s  ✓  (was failing with 4 errors)
+artifacts/mockup-sandbox   typecheck — Done in 8.3s  ✓
+scripts                    typecheck — Done in 1.7s  ✓
+```
+
+```
+pnpm setup
+
+→ Installing dependencies...   Done in 2.8s
+→ Pushing DB schema...         [✓] No changes detected
+✓ Setup complete.
+```
+
+**README.md updated** — `## Useful Commands` section reorganized into `Root-level` / `Per-artifact` / `Docker` subsections; `pnpm setup`, `pnpm typecheck`, and `pnpm build` documented prominently.
+
+---
+
+### Batch 4 — Documentation (Previous Batch)
 
 **Goal:** Create GitHub-quality documentation so an external developer can understand and run the repo without Replit-specific knowledge.
 

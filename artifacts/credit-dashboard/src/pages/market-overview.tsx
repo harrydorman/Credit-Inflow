@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { useGetMarketOverview, useGetTrends, useListArticles } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { Link } from "wouter";
@@ -15,7 +16,7 @@ function MarketDirectionBanner({ direction, hygMove, lqdMove }: {
   hygMove: number | null | undefined;
   lqdMove: number | null | undefined;
 }) {
-  const directionConfig: Record<string, { label: string; color: string; bg: string; icon: JSX.Element }> = {
+  const directionConfig: Record<string, { label: string; color: string; bg: string; icon: ReactElement }> = {
     "risk-off": {
       label: "RISK-OFF",
       color: "text-red-400",

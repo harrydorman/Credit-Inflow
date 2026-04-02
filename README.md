@@ -224,34 +224,50 @@ These items are intentionally out of scope for the current platform restructurin
 
 ## Useful Commands
 
+### Root-level (run from repo root)
+
 ```bash
-# Install all workspace dependencies
+# Install dependencies + push DB schema (idempotent — safe to re-run after any pull)
+pnpm setup
+
+# Typecheck the entire monorepo (libs built first, then all artifacts and scripts)
+pnpm typecheck
+
+# Full build: typecheck then bundle all artifacts that have a build script
+pnpm build
+
+# Install all workspace dependencies only
 pnpm install
 
-# Push DB schema (safe to re-run)
+# Push DB schema only (safe to re-run)
 pnpm --filter @workspace/db run push
+```
 
+### Per-artifact
+
+```bash
 # Start API server (dev, with auto-rebuild)
 pnpm --filter @workspace/api-server run dev
 
 # Start frontend (dev, with HMR)
 pnpm --filter @workspace/credit-dashboard run dev
 
-# Typecheck the API server
+# Typecheck the API server only
 pnpm --filter @workspace/api-server run typecheck
 
-# Typecheck the frontend
+# Typecheck the frontend only
 pnpm --filter @workspace/credit-dashboard run typecheck
 
-# Build the API server bundle
+# Build the API server esbuild bundle only
 pnpm --filter @workspace/api-server run build
+```
 
-# Run setup (install + DB push) — same as after a task-agent merge
-bash scripts/setup.sh
+### Docker (local database)
 
+```bash
 # Stop local DB
 docker-compose -f docker-compose.dev.yml down
 
-# Stop local DB and wipe data volume
+# Stop local DB and wipe data volume (full reset)
 docker-compose -f docker-compose.dev.yml down -v
 ```
