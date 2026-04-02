@@ -8,6 +8,13 @@ import { getETFSnapshot, validateWithMarketData } from "../lib/marketData";
 import { logger } from "../lib/logger";
 import { enrichContent } from "../lib/contentEnricher";
 
+function sanitizeNullStr(val: string | null | undefined): string | null {
+  if (val === null || val === undefined) return null;
+  const trimmed = val.trim();
+  if (trimmed === "" || trimmed === "null" || trimmed === "undefined" || trimmed === "N/A" || trimmed === "n/a") return null;
+  return trimmed;
+}
+
 const router: IRouter = Router();
 
 router.post("/refresh", async (req, res): Promise<void> => {
@@ -98,27 +105,27 @@ router.post("/refresh", async (req, res): Promise<void> => {
           contentSourceType: enriched.contentSourceType,
           contentDepthScore: enriched.contentDepthScore,
 
-          summary: analysis?.summary ?? null,
-          sector: analysis?.sector ?? null,
-          eventType: analysis?.eventType ?? null,
-          sentiment: analysis?.sentiment ?? null,
-          whyItMatters: analysis?.whyItMatters ?? null,
-          whoCares: analysis ? analysis.whoCares.join(", ") : null,
+          summary: sanitizeNullStr(analysis?.summary),
+          sector: sanitizeNullStr(analysis?.sector),
+          eventType: sanitizeNullStr(analysis?.eventType),
+          sentiment: sanitizeNullStr(analysis?.sentiment),
+          whyItMatters: sanitizeNullStr(analysis?.whyItMatters),
+          whoCares: analysis ? sanitizeNullStr(analysis.whoCares.join(", ")) : null,
 
           cloImpact: analysis?.cloImpact ?? false,
-          issuerName: analysis?.issuerName ?? null,
+          issuerName: sanitizeNullStr(analysis?.issuerName),
 
           urgencyScore: analysis?.urgencyScore ?? null,
           covenantFlag: analysis?.covenantFlag ?? false,
-          ratingMentioned: analysis?.ratingMentioned ?? null,
-          ratingAgency: analysis?.ratingAgency ?? null,
-          marketImpact: analysis?.marketImpact ?? null,
+          ratingMentioned: sanitizeNullStr(analysis?.ratingMentioned),
+          ratingAgency: sanitizeNullStr(analysis?.ratingAgency),
+          marketImpact: sanitizeNullStr(analysis?.marketImpact),
 
           finalUrgencyScore: analysis?.finalUrgencyScore ?? null,
           creditSignalScore: analysis?.creditSignalScore ?? null,
 
-          tradeDirection: analysis?.tradeDirection ?? null,
-          tradeRationale: analysis?.tradeRationale ?? null,
+          tradeDirection: sanitizeNullStr(analysis?.tradeDirection),
+          tradeRationale: sanitizeNullStr(analysis?.tradeRationale),
           potentialTrades: analysis?.potentialTrades ?? null,
           marketsImpacted: analysis?.marketsImpacted ?? null,
 
@@ -131,13 +138,13 @@ router.post("/refresh", async (req, res): Promise<void> => {
           ratingIsUpgrade: analysis?.ratingIsUpgrade ?? false,
           ratingIsCCCThreshold: analysis?.ratingIsCCCThreshold ?? false,
 
-          covenantType: analysis?.covenantType ?? null,
+          covenantType: sanitizeNullStr(analysis?.covenantType),
 
-          cloRelevance: analysis?.cloRelevance ?? null,
-          cloLoanVsBond: analysis?.cloLoanVsBond ?? null,
-          cloWarfImpact: analysis?.cloWarfImpact ?? null,
+          cloRelevance: sanitizeNullStr(analysis?.cloRelevance),
+          cloLoanVsBond: sanitizeNullStr(analysis?.cloLoanVsBond),
+          cloWarfImpact: sanitizeNullStr(analysis?.cloWarfImpact),
           cloCCCBucketRisk: analysis?.cloCCCBucketRisk ?? false,
-          cloExplanation: analysis?.cloExplanation ?? null,
+          cloExplanation: sanitizeNullStr(analysis?.cloExplanation),
           cloImpactTypes: analysis?.cloImpactTypes ?? null,
 
           spreadWideningRisk: analysis?.spreadWideningRisk ?? false,
@@ -298,23 +305,23 @@ router.post("/refresh/backfill", async (req, res): Promise<void> => {
         await db
           .update(articlesTable)
           .set({
-            summary: analysis.summary,
-            sector: analysis.sector,
-            eventType: analysis.eventType,
-            sentiment: analysis.sentiment,
-            whyItMatters: analysis.whyItMatters,
-            whoCares: analysis.whoCares.join(", "),
+            summary: sanitizeNullStr(analysis.summary),
+            sector: sanitizeNullStr(analysis.sector),
+            eventType: sanitizeNullStr(analysis.eventType),
+            sentiment: sanitizeNullStr(analysis.sentiment),
+            whyItMatters: sanitizeNullStr(analysis.whyItMatters),
+            whoCares: sanitizeNullStr(analysis.whoCares.join(", ")),
             cloImpact: analysis.cloImpact,
-            issuerName: analysis.issuerName,
+            issuerName: sanitizeNullStr(analysis.issuerName),
             urgencyScore: analysis.urgencyScore,
             covenantFlag: analysis.covenantFlag,
-            ratingMentioned: analysis.ratingMentioned,
-            ratingAgency: analysis.ratingAgency,
-            marketImpact: analysis.marketImpact,
+            ratingMentioned: sanitizeNullStr(analysis.ratingMentioned),
+            ratingAgency: sanitizeNullStr(analysis.ratingAgency),
+            marketImpact: sanitizeNullStr(analysis.marketImpact),
             finalUrgencyScore: analysis.finalUrgencyScore,
             creditSignalScore: analysis.creditSignalScore,
-            tradeDirection: analysis.tradeDirection,
-            tradeRationale: analysis.tradeRationale,
+            tradeDirection: sanitizeNullStr(analysis.tradeDirection),
+            tradeRationale: sanitizeNullStr(analysis.tradeRationale),
             potentialTrades: analysis.potentialTrades,
             marketsImpacted: analysis.marketsImpacted,
             leverageMentioned: analysis.leverageMentioned,
@@ -324,12 +331,12 @@ router.post("/refresh/backfill", async (req, res): Promise<void> => {
             ratingIsDowngrade: analysis.ratingIsDowngrade,
             ratingIsUpgrade: analysis.ratingIsUpgrade,
             ratingIsCCCThreshold: analysis.ratingIsCCCThreshold,
-            covenantType: analysis.covenantType,
-            cloRelevance: analysis.cloRelevance,
-            cloLoanVsBond: analysis.cloLoanVsBond,
-            cloWarfImpact: analysis.cloWarfImpact,
+            covenantType: sanitizeNullStr(analysis.covenantType),
+            cloRelevance: sanitizeNullStr(analysis.cloRelevance),
+            cloLoanVsBond: sanitizeNullStr(analysis.cloLoanVsBond),
+            cloWarfImpact: sanitizeNullStr(analysis.cloWarfImpact),
             cloCCCBucketRisk: analysis.cloCCCBucketRisk,
-            cloExplanation: analysis.cloExplanation,
+            cloExplanation: sanitizeNullStr(analysis.cloExplanation),
             cloImpactTypes: analysis.cloImpactTypes,
             spreadWideningRisk: analysis.spreadWideningRisk,
             forcedSellingRisk: analysis.forcedSellingRisk,

@@ -407,7 +407,7 @@ export default function IssuerDetail() {
                       )}
                       {article.ratingMentioned && (
                         <Badge className="text-[10px] bg-purple-900/40 text-purple-200 border-purple-700 font-mono shrink-0">
-                          {article.ratingAgency ? `${article.ratingAgency}: ` : ""}{article.ratingMentioned}
+                          {article.ratingAgency && article.ratingAgency !== "null" ? `${article.ratingAgency}: ` : ""}{article.ratingMentioned}
                         </Badge>
                       )}
                     </div>

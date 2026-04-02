@@ -136,7 +136,7 @@ export default function Brief() {
                           <div className="text-muted-foreground">{alert.sector?.toUpperCase()}</div>
                           {alert.ratingMentioned && (
                             <div className="text-purple-400">
-                              {alert.ratingAgency ? `${alert.ratingAgency}: ` : ""}
+                              {alert.ratingAgency && alert.ratingAgency !== "null" ? `${alert.ratingAgency}: ` : ""}
                               {alert.ratingMentioned}
                             </div>
                           )}

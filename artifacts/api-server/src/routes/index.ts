@@ -7,6 +7,7 @@ import ingestionRouter from "./ingestion";
 import trendsRouter from "./trends";
 import issuerThesisRouter from "./issuerThesis";
 import marketOverviewRouter from "./marketOverview";
+import debugRouter from "./debug";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(ingestionRouter);
 router.use(trendsRouter);
 router.use(issuerThesisRouter);
 router.use(marketOverviewRouter);
+router.use(debugRouter);
 
 export default router;

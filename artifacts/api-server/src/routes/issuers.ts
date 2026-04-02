@@ -16,7 +16,7 @@ router.get("/issuers", async (_req, res): Promise<void> => {
   const issuerMap = new Map<string, typeof enriched>();
 
   for (const article of enriched) {
-    if (!article.issuerName) continue;
+    if (!article.issuerName || article.issuerName === "null" || article.issuerName === "undefined") continue;
     const bucket = issuerMap.get(article.issuerName) ?? [];
     bucket.push(article);
     issuerMap.set(article.issuerName, bucket);
