@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, articlesTable } from "@workspace/db";
-import { ListArticlesQueryParams, ListArticlesResponse, GetArticleParams, GetArticleResponse } from "@workspace/api-zod";
+import { ListArticlesQueryParams, GetArticleParams } from "@workspace/api-zod";
 import { and, eq, gte } from "drizzle-orm";
 import { enrichArticle } from "../lib/intelligence";
 
@@ -37,7 +37,7 @@ router.get("/articles", async (req, res): Promise<void> => {
     .slice(off, off + lim)
     .map((article) => enrichArticle(article, allArticles));
 
-  res.json(ListArticlesResponse.parse({ articles, total }));
+  res.json({ articles, total });
 });
 
 router.get("/articles/:id", async (req, res): Promise<void> => {
@@ -56,7 +56,7 @@ router.get("/articles/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(GetArticleResponse.parse(enrichArticle(article, allArticles)));
+  res.json(enrichArticle(article, allArticles));
 });
 
 export default router;

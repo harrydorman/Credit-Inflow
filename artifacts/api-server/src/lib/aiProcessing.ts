@@ -175,23 +175,30 @@ export async function analyzeArticle(
 
   const prompt = `You are a senior credit portfolio manager with 20+ years trading high yield bonds and leveraged loans. You have deep expertise in CLO structuring, covenant analysis, and distressed credit.
 
-Analyze this financial article with the precision required at a credit desk. Be highly technical and specific. Quantify risk where possible. Avoid vague language like "may impact markets" — instead say "increases likelihood of spread widening in B/CCC cohort by 50-75bps" or "triggers CCC bucket breach risk for leveraged loan CLOs."
+Your job is NOT to write a generic summary. Your job is to determine whether this article changes the credit view.
+
+Critical grounding rules:
+- Use only information explicitly present in the provided title/content.
+- Do not invent spreads, leverage multiples, maturity dates, ratings, or other numbers that are not stated.
+- If the source is thin (headline or RSS snippet), lower confidence in your wording and avoid over-claiming.
+- Separate confirmed facts from inference.
+- Prefer concise, evidence-backed language over dramatic language.
 
 Article:
 ${articleText.slice(0, 3500)}
 
 Respond ONLY with valid JSON (no markdown, no code blocks):
 {
-  "summary": "3-5 sentence credit-focused summary. Mention specific spreads, ratings, leverage multiples, or debt metrics if present. State credit implications explicitly.",
+  "summary": "2-4 sentence evidence-backed credit summary. Mention ratings, leverage multiples, maturity walls, or debt metrics only if explicitly present in the text.",
   "sector": "one of: ${SECTORS.join(", ")}",
   "eventType": "one of: ${EVENT_TYPES.join(", ")}",
   "sentiment": "positive | negative | neutral (strictly from a bondholder/credit investor perspective)",
-  "whyItMatters": "2-3 sentences on: (1) default risk trajectory, (2) spread/CDS impact, (3) structural credit implications for CLO managers or HY funds",
+  "whyItMatters": "2-3 sentences on what changes for creditors now. Distinguish confirmed facts from your inference where needed.",
 
   "tradeImplication": {
     "direction": "positive | negative | neutral",
     "marketsImpacted": ["e.g. HY bonds", "leveraged loans", "CDS", "CLO equity"],
-    "rationale": "specific credit rationale for market movement",
+    "rationale": "specific credit rationale tied to facts in the text; if evidence is weak, say that clearly",
     "potentialTrades": ["e.g. 'Short CDS protection on B-rated issuer', 'Sell BB/B loans ahead of downgrade', 'Buy HY ETF puts']"
   },
 
@@ -238,11 +245,11 @@ Respond ONLY with valid JSON (no markdown, no code blocks):
   "urgencyScoreAI": 1-5,
 
   "creditSummary": {
-    "situation": "1-2 sentences: what is happening to this issuer/sector, with specific numbers if available",
+    "situation": "1-2 sentences: what is happening to this issuer/sector, with only the specific numbers that are actually in the text",
     "creditDrivers": ["primary credit driver 1", "primary credit driver 2"],
     "riskFactors": ["downside risk 1", "downside risk 2"],
     "keyMetricsMentioned": ["e.g. 'leverage 6.5x EBITDA'", "'CCC bucket at 8%'", "'$2.1B maturity in 2026'"],
-    "bottomLine": "1-sentence credit verdict: what a credit investor should do and why"
+    "bottomLine": "1-sentence credit verdict using measured language; avoid certainty when evidence is limited"
   },
 
   "scoreExplanation": {
