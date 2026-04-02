@@ -2,7 +2,7 @@ import { Article } from "@workspace/api-client-react";
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Link } from "wouter";
-import { Clock, AlertTriangle, AlertOctagon, CheckCircle, AlertCircle, TrendingUp, TrendingDown, Shield, Files } from "lucide-react";
+import { Clock, AlertTriangle, AlertOctagon, CheckCircle, AlertCircle, TrendingUp, TrendingDown, Shield, Files, ShieldAlert, ShieldOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 export function ArticleCard({ article }: { article: Article }) {
@@ -10,6 +10,16 @@ export function ArticleCard({ article }: { article: Article }) {
     trustProfile?: { trustLabel: string; trustScore: number; sourceTier: string; evidenceCount: number; corroboratingArticleCount?: number; primarySourcePresent?: boolean };
     signalCard?: { signalLabel: string; whyNow: string; confidence: string; decisionUse?: string; creditImplications?: string[] };
     sourceProfile?: { displayName?: string };
+  };
+
+  const trustLabel = enriched.trustProfile?.trustLabel;
+  const trustScore = enriched.trustProfile?.trustScore;
+  const sourceTier = enriched.trustProfile?.sourceTier ?? "tertiary";
+
+  const getTrustStripClass = () => {
+    if (trustLabel === "high") return "border-l-[3px] border-l-emerald-500";
+    if (trustLabel === "medium") return "border-l-[3px] border-l-amber-400";
+    return "border-l-[3px] border-l-red-700/60";
   };
 
   const getSentimentColor = (sentiment?: string | null) => {
@@ -31,9 +41,54 @@ export function ArticleCard({ article }: { article: Article }) {
 
   const urgency = getUrgencyProps(article.finalUrgencyScore ?? article.urgencyScore);
 
+  const SourceTierBadge = () => {
+    if (sourceTier === "primary") {
+      return (
+        <span className="flex items-center gap-0.5 text-emerald-400 bg-emerald-950/30 border border-emerald-800/50 px-1.5 py-0.5 rounded text-[10px] font-bold font-mono">
+          <Shield className="h-2.5 w-2.5" /> PRIMARY
+        </span>
+      );
+    }
+    if (sourceTier === "secondary") {
+      return (
+        <span className="flex items-center gap-0.5 text-sky-400 bg-sky-950/20 border border-sky-800/30 px-1.5 py-0.5 rounded text-[10px] font-mono">
+          <ShieldAlert className="h-2.5 w-2.5" /> SECONDARY
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center gap-0.5 text-amber-500/80 bg-amber-950/20 border border-amber-800/30 px-1.5 py-0.5 rounded text-[10px] font-mono">
+        <ShieldOff className="h-2.5 w-2.5" /> TERTIARY
+      </span>
+    );
+  };
+
+  const TrustBadge = () => {
+    if (!trustLabel || !trustScore) return null;
+    if (trustLabel === "high") {
+      return (
+        <span className="flex items-center gap-0.5 text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 px-1.5 py-0.5 rounded text-[10px] font-bold">
+          <CheckCircle className="h-2.5 w-2.5" /> TRUST {trustScore}
+        </span>
+      );
+    }
+    if (trustLabel === "medium") {
+      return (
+        <span className="flex items-center gap-0.5 text-amber-400 bg-amber-950/20 border border-amber-800/30 px-1.5 py-0.5 rounded text-[10px]">
+          <AlertCircle className="h-2.5 w-2.5" /> TRUST {trustScore}
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center gap-0.5 text-red-400/70 bg-red-950/20 border border-red-800/20 px-1.5 py-0.5 rounded text-[10px]">
+        <ShieldOff className="h-2.5 w-2.5" /> TRUST {trustScore}
+      </span>
+    );
+  };
+
   return (
     <Link href={`/article/${article.id}`} className="block transition-all hover:-translate-y-0.5 no-default-hover-elevate">
-      <Card className={`bg-card border-border hover:border-primary/50 transition-colors h-full ${article.covenantFlag ? "border-red-600/50 hover:border-red-600" : ""}`}>
+      <Card className={`bg-card border-border hover:border-primary/50 transition-colors h-full ${article.covenantFlag ? "border-red-600/50 hover:border-red-600" : ""} ${getTrustStripClass()}`}>
         <CardHeader className="p-4 pb-2">
           <div className="flex justify-between items-start gap-2 mb-2">
             <div className="flex flex-wrap gap-1.5">
@@ -88,23 +143,10 @@ export function ArticleCard({ article }: { article: Article }) {
           )}
 
           <div className="flex items-center justify-between text-xs text-muted-foreground font-mono gap-2">
-            <span className="truncate">SRC: {article.source} {enriched.trustProfile ? `· ${enriched.trustProfile.sourceTier.toUpperCase()}` : ""}</span>
+            <span className="truncate">SRC: {enriched.sourceProfile?.displayName ?? article.source}</span>
             <div className="flex items-center gap-1.5 flex-wrap justify-end">
-              {enriched.trustProfile?.primarySourcePresent && (
-                <span className="flex items-center gap-0.5 text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 px-1.5 py-0.5 rounded text-[10px] font-bold">
-                  <Shield className="h-2.5 w-2.5" /> PRIMARY
-                </span>
-              )}
-              {(enriched.trustProfile?.trustLabel === "high" || article.confidenceScore === "high") && (
-                <span className="flex items-center gap-0.5 text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 px-1.5 py-0.5 rounded text-[10px] font-bold">
-                  <CheckCircle className="h-2.5 w-2.5" /> TRUST {enriched.trustProfile?.trustScore ?? "HI"}
-                </span>
-              )}
-              {(enriched.trustProfile?.trustLabel === "medium" || article.confidenceScore === "medium") && (
-                <span className="flex items-center gap-0.5 text-amber-400 bg-amber-950/20 border border-amber-800/30 px-1.5 py-0.5 rounded text-[10px]">
-                  TRUST {enriched.trustProfile?.trustScore ?? "MED"}
-                </span>
-              )}
+              <SourceTierBadge />
+              <TrustBadge />
               {article.marketValidationSignal === "confirmed" && (
                 <span className="flex items-center gap-0.5 text-emerald-400 text-[10px] font-bold">
                   <CheckCircle className="h-2.5 w-2.5" /> MKT

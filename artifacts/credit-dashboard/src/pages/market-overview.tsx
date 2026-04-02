@@ -288,6 +288,52 @@ export default function MarketOverview() {
           />
         </div>
 
+        {/* Deterioration alert */}
+        {riskSummary.overallCondition === "deteriorating" && (
+          <div className="rounded-lg border border-red-800/60 bg-red-950/20 p-4">
+            <div className="flex items-start gap-3">
+              <AlertOctagon className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-mono font-bold text-red-400 tracking-widest">DETERIORATION ALERT</span>
+                  <span className="text-[10px] font-mono text-muted-foreground">{riskSummary.negativeSignals} negative signals in 72h window</span>
+                </div>
+                <div className="flex flex-wrap gap-3 text-xs font-mono">
+                  {riskSummary.covenantFlags > 0 && (
+                    <span className="flex items-center gap-1.5 text-red-300">
+                      <AlertOctagon className="h-3 w-3" />
+                      {riskSummary.covenantFlags} covenant breach{riskSummary.covenantFlags !== 1 ? "es" : ""} flagged
+                    </span>
+                  )}
+                  {riskSummary.downgrades > 0 && (
+                    <span className="flex items-center gap-1.5 text-orange-300">
+                      <AlertTriangle className="h-3 w-3" />
+                      {riskSummary.downgrades} downgrade{riskSummary.downgrades !== 1 ? "s" : ""} detected
+                    </span>
+                  )}
+                  {riskSummary.urgentArticles > 0 && (
+                    <span className="flex items-center gap-1.5 text-amber-300">
+                      <Zap className="h-3 w-3" />
+                      {riskSummary.urgentArticles} high-urgency signal{riskSummary.urgentArticles !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {topRisks.slice(0, 3).map((r) => (
+                    <span key={r.sector} className="flex items-center gap-1 text-muted-foreground">
+                      <span className="text-foreground font-bold">{r.sector}</span>
+                      <span className="text-red-400">↓{r.avgUrgency}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <Link href="/signals">
+                <span className="text-[10px] font-mono text-primary hover:underline flex items-center gap-1 shrink-0 cursor-pointer">
+                  VIEW SIGNALS <ArrowRight className="h-3 w-3" />
+                </span>
+              </Link>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
           {/* Top Risks by Sector */}
