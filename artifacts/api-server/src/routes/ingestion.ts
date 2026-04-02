@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { and, eq, isNull, isNotNull } from "drizzle-orm";
 import { db, articlesTable } from "@workspace/db";
 import { TriggerRefreshResponse } from "@workspace/api-zod";
 import { fetchAllArticles } from "../lib/dataProviders";
@@ -19,7 +20,6 @@ router.post("/refresh", async (req, res): Promise<void> => {
   let marketValidated = 0;
 
   try {
-    // Pre-fetch ETF snapshot once for this ingestion run (cached 15 min)
     const etfSnapshot = await getETFSnapshot();
     req.log.info({
       hygMove: etfSnapshot.hyg?.move1D?.toFixed(3) ?? "n/a",
@@ -39,9 +39,12 @@ router.post("/refresh", async (req, res): Promise<void> => {
 
     for (const raw of newArticles) {
       try {
-        // Noise reduction: skip low-signal articles before sending to OpenAI
         if (!passesNoiseFilter(raw.title, raw.rawContent)) {
           noiseFiltered++;
+          req.log.info(
+            { title: raw.title.slice(0, 70), source: raw.source },
+            "Noise-filtered: skipping AI processing (score < threshold)"
+          );
           await db.insert(articlesTable).values({
             title: raw.title,
             source: raw.source,
@@ -55,7 +58,6 @@ router.post("/refresh", async (req, res): Promise<void> => {
 
         const analysis = await analyzeArticle(raw.title, raw.rawContent);
 
-        // Market validation: run for AI-processed articles
         let marketValidation = null;
         if (analysis) {
           marketValidation = await validateWithMarketData({
@@ -68,6 +70,13 @@ router.post("/refresh", async (req, res): Promise<void> => {
           marketValidated++;
         }
 
+        if (!analysis) {
+          req.log.warn(
+            { title: raw.title.slice(0, 70) },
+            "AI processing returned null — storing as unprocessed stub"
+          );
+        }
+
         await db.insert(articlesTable).values({
           title: raw.title,
           source: raw.source,
@@ -75,7 +84,6 @@ router.post("/refresh", async (req, res): Promise<void> => {
           url: raw.url,
           rawContent: raw.rawContent,
 
-          // Core AI fields
           summary: analysis?.summary ?? null,
           sector: analysis?.sector ?? null,
           eventType: analysis?.eventType ?? null,
@@ -83,44 +91,34 @@ router.post("/refresh", async (req, res): Promise<void> => {
           whyItMatters: analysis?.whyItMatters ?? null,
           whoCares: analysis ? analysis.whoCares.join(", ") : null,
 
-          // Legacy CLO
           cloImpact: analysis?.cloImpact ?? false,
-
-          // Issuer
           issuerName: analysis?.issuerName ?? null,
 
-          // Phase 1 scores (compat)
           urgencyScore: analysis?.urgencyScore ?? null,
           covenantFlag: analysis?.covenantFlag ?? false,
           ratingMentioned: analysis?.ratingMentioned ?? null,
           ratingAgency: analysis?.ratingAgency ?? null,
           marketImpact: analysis?.marketImpact ?? null,
 
-          // Phase 2 scores
           finalUrgencyScore: analysis?.finalUrgencyScore ?? null,
           creditSignalScore: analysis?.creditSignalScore ?? null,
 
-          // Trade implication
           tradeDirection: analysis?.tradeDirection ?? null,
           tradeRationale: analysis?.tradeRationale ?? null,
           potentialTrades: analysis?.potentialTrades ?? null,
           marketsImpacted: analysis?.marketsImpacted ?? null,
 
-          // Credit metrics
           leverageMentioned: analysis?.leverageMentioned ?? false,
           liquidityConcern: analysis?.liquidityConcern ?? false,
           refinancingRisk: analysis?.refinancingRisk ?? false,
           earningsMiss: analysis?.earningsMiss ?? false,
 
-          // Enhanced rating
           ratingIsDowngrade: analysis?.ratingIsDowngrade ?? false,
           ratingIsUpgrade: analysis?.ratingIsUpgrade ?? false,
           ratingIsCCCThreshold: analysis?.ratingIsCCCThreshold ?? false,
 
-          // Covenant detail
           covenantType: analysis?.covenantType ?? null,
 
-          // CLO deep analysis
           cloRelevance: analysis?.cloRelevance ?? null,
           cloLoanVsBond: analysis?.cloLoanVsBond ?? null,
           cloWarfImpact: analysis?.cloWarfImpact ?? null,
@@ -128,19 +126,17 @@ router.post("/refresh", async (req, res): Promise<void> => {
           cloExplanation: analysis?.cloExplanation ?? null,
           cloImpactTypes: analysis?.cloImpactTypes ?? null,
 
-          // Market technical
           spreadWideningRisk: analysis?.spreadWideningRisk ?? false,
           forcedSellingRisk: analysis?.forcedSellingRisk ?? false,
           distressedRisk: analysis?.distressedRisk ?? false,
 
-          // Market validation
           stockMove1D: marketValidation?.stockMove1D ?? null,
           stockMove5D: marketValidation?.stockMove5D ?? null,
           hyETFMove: marketValidation?.hyETFMove ?? null,
           marketValidationSignal: marketValidation?.validationSignal ?? null,
           confidenceScore: marketValidation?.confidenceScore ?? null,
 
-          // Structured AI outputs
+          // Structured AI outputs — persisted as JSON columns
           creditSummaryJson: analysis?.creditSummary ?? null,
           scoreExplanationJson: analysis?.scoreExplanation ?? null,
 
@@ -155,7 +151,10 @@ router.post("/refresh", async (req, res): Promise<void> => {
       }
     }
 
-    req.log.info({ fetched, processed, duplicatesSkipped, noiseFiltered, marketValidated, errors }, "Ingestion complete");
+    req.log.info(
+      { fetched, processed, duplicatesSkipped, noiseFiltered, marketValidated, errors },
+      "Ingestion complete"
+    );
 
     res.json(
       TriggerRefreshResponse.parse({
@@ -169,6 +168,186 @@ router.post("/refresh", async (req, res): Promise<void> => {
   } catch (err) {
     logger.error({ err }, "Ingestion failed");
     res.status(500).json({ error: "Ingestion failed" });
+  }
+});
+
+// ── Backfill endpoint ──────────────────────────────────────────────────────────
+// Fixes two gaps:
+// 1. Articles processed before creditSummary/scoreExplanation were added to the prompt
+//    → re-runs AI for structured outputs only, does UPDATE
+// 2. Articles with processedAt=null that may have failed AI (not noise-filtered)
+//    → re-checks noise filter, re-runs full AI if they pass, does UPDATE
+router.post("/refresh/backfill", async (req, res): Promise<void> => {
+  req.log.info("Starting structured-output backfill");
+
+  let backfilledStructured = 0;
+  let retriedUnprocessed = 0;
+  let skippedNoiseFilter = 0;
+  let aiNullReturned = 0;
+  let errors = 0;
+
+  try {
+    // ── Phase 1: Articles already AI-processed but missing structured JSON ──
+    const needsStructuredBackfill = await db
+      .select({
+        id: articlesTable.id,
+        title: articlesTable.title,
+        rawContent: articlesTable.rawContent,
+      })
+      .from(articlesTable)
+      .where(
+        and(
+          isNotNull(articlesTable.processedAt),
+          isNull(articlesTable.creditSummaryJson)
+        )
+      )
+      .limit(30);
+
+    req.log.info(
+      { count: needsStructuredBackfill.length },
+      "Phase 1: articles needing structured output backfill"
+    );
+
+    for (const article of needsStructuredBackfill) {
+      try {
+        const analysis = await analyzeArticle(article.title, article.rawContent);
+
+        if (!analysis) {
+          req.log.warn(
+            { id: article.id, title: article.title.slice(0, 70) },
+            "Backfill Phase 1: AI returned null"
+          );
+          aiNullReturned++;
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          continue;
+        }
+
+        await db
+          .update(articlesTable)
+          .set({
+            creditSummaryJson: analysis.creditSummary ?? null,
+            scoreExplanationJson: analysis.scoreExplanation ?? null,
+          })
+          .where(eq(articlesTable.id, article.id));
+
+        backfilledStructured++;
+        req.log.info(
+          { id: article.id, title: article.title.slice(0, 70), hasSummary: !!analysis.creditSummary },
+          "Backfill Phase 1: structured outputs updated"
+        );
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      } catch (err) {
+        logger.error({ err, id: article.id }, "Backfill Phase 1: error");
+        errors++;
+      }
+    }
+
+    // ── Phase 2: Articles with processedAt=null — retry AI ──────────────────
+    const unprocessed = await db
+      .select({
+        id: articlesTable.id,
+        title: articlesTable.title,
+        rawContent: articlesTable.rawContent,
+      })
+      .from(articlesTable)
+      .where(isNull(articlesTable.processedAt))
+      .limit(20);
+
+    req.log.info(
+      { count: unprocessed.length },
+      "Phase 2: unprocessed articles to retry"
+    );
+
+    for (const article of unprocessed) {
+      try {
+        if (!passesNoiseFilter(article.title, article.rawContent)) {
+          skippedNoiseFilter++;
+          req.log.info(
+            { id: article.id, title: article.title.slice(0, 70) },
+            "Backfill Phase 2: noise-filtered, skip"
+          );
+          continue;
+        }
+
+        const analysis = await analyzeArticle(article.title, article.rawContent);
+
+        if (!analysis) {
+          req.log.warn(
+            { id: article.id, title: article.title.slice(0, 70) },
+            "Backfill Phase 2: AI returned null on retry"
+          );
+          aiNullReturned++;
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          continue;
+        }
+
+        await db
+          .update(articlesTable)
+          .set({
+            summary: analysis.summary,
+            sector: analysis.sector,
+            eventType: analysis.eventType,
+            sentiment: analysis.sentiment,
+            whyItMatters: analysis.whyItMatters,
+            whoCares: analysis.whoCares.join(", "),
+            cloImpact: analysis.cloImpact,
+            issuerName: analysis.issuerName,
+            urgencyScore: analysis.urgencyScore,
+            covenantFlag: analysis.covenantFlag,
+            ratingMentioned: analysis.ratingMentioned,
+            ratingAgency: analysis.ratingAgency,
+            marketImpact: analysis.marketImpact,
+            finalUrgencyScore: analysis.finalUrgencyScore,
+            creditSignalScore: analysis.creditSignalScore,
+            tradeDirection: analysis.tradeDirection,
+            tradeRationale: analysis.tradeRationale,
+            potentialTrades: analysis.potentialTrades,
+            marketsImpacted: analysis.marketsImpacted,
+            leverageMentioned: analysis.leverageMentioned,
+            liquidityConcern: analysis.liquidityConcern,
+            refinancingRisk: analysis.refinancingRisk,
+            earningsMiss: analysis.earningsMiss,
+            ratingIsDowngrade: analysis.ratingIsDowngrade,
+            ratingIsUpgrade: analysis.ratingIsUpgrade,
+            ratingIsCCCThreshold: analysis.ratingIsCCCThreshold,
+            covenantType: analysis.covenantType,
+            cloRelevance: analysis.cloRelevance,
+            cloLoanVsBond: analysis.cloLoanVsBond,
+            cloWarfImpact: analysis.cloWarfImpact,
+            cloCCCBucketRisk: analysis.cloCCCBucketRisk,
+            cloExplanation: analysis.cloExplanation,
+            cloImpactTypes: analysis.cloImpactTypes,
+            spreadWideningRisk: analysis.spreadWideningRisk,
+            forcedSellingRisk: analysis.forcedSellingRisk,
+            distressedRisk: analysis.distressedRisk,
+            creditSummaryJson: analysis.creditSummary ?? null,
+            scoreExplanationJson: analysis.scoreExplanation ?? null,
+            processedAt: new Date(),
+          })
+          .where(eq(articlesTable.id, article.id));
+
+        retriedUnprocessed++;
+        req.log.info(
+          { id: article.id, title: article.title.slice(0, 70) },
+          "Backfill Phase 2: successfully processed previously-unprocessed article"
+        );
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      } catch (err) {
+        logger.error({ err, id: article.id }, "Backfill Phase 2: error");
+        errors++;
+      }
+    }
+
+    const message = `Backfill complete: ${backfilledStructured} structured outputs updated, ${retriedUnprocessed} unprocessed articles processed, ${skippedNoiseFilter} noise-filtered (legitimately skipped), ${aiNullReturned} AI null returns, ${errors} errors`;
+    req.log.info(
+      { backfilledStructured, retriedUnprocessed, skippedNoiseFilter, aiNullReturned, errors },
+      "Backfill complete"
+    );
+
+    res.json({ backfilledStructured, retriedUnprocessed, skippedNoiseFilter, aiNullReturned, errors, message });
+  } catch (err) {
+    logger.error({ err }, "Backfill failed");
+    res.status(500).json({ error: "Backfill failed" });
   }
 });
 
