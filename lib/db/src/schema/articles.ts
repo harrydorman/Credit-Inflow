@@ -94,6 +94,10 @@ export const articlesTable = pgTable("articles", {
   contentDepthScore: integer("content_depth_score"),       // 0-100: richer content = higher score
   contentSourceType: text("content_source_type"),          // "rss_snippet" | "expanded_article" | "api_fulltext"
 
+  // Processing outcome tracking
+  // Values: "noise_filtered" | "empty_content" | "ai_null" | "ai_error" | "duplicate" | null (= processed OK)
+  processFailureReason: text("process_failure_reason"),
+
   processedAt: timestamp("processed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

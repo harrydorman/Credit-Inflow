@@ -7,12 +7,17 @@ import { analyzeArticle, passesNoiseFilter } from "../lib/aiProcessing";
 import { getETFSnapshot, validateWithMarketData } from "../lib/marketData";
 import { logger } from "../lib/logger";
 import { enrichContent } from "../lib/contentEnricher";
+import { canonicalizeIssuer } from "../lib/canonicalIssuers";
 
 function sanitizeNullStr(val: string | null | undefined): string | null {
   if (val === null || val === undefined) return null;
   const trimmed = val.trim();
   if (trimmed === "" || trimmed === "null" || trimmed === "undefined" || trimmed === "N/A" || trimmed === "n/a") return null;
   return trimmed;
+}
+
+function sanitizeIssuer(val: string | null | undefined): string | null {
+  return canonicalizeIssuer(sanitizeNullStr(val));
 }
 
 const router: IRouter = Router();
@@ -54,6 +59,28 @@ router.post("/refresh", async (req, res): Promise<void> => {
           contentDepthScore: Math.min(30, Math.floor(rawSnippet.length / 10)),
         }));
 
+        const hasContent = (enriched.rawContent?.trim().length ?? 0) > 0;
+        if (!hasContent) {
+          noiseFiltered++;
+          req.log.info(
+            { title: raw.title.slice(0, 70), source: raw.source },
+            "Empty content: skipping AI processing"
+          );
+          await db.insert(articlesTable).values({
+            title: raw.title,
+            source: raw.source,
+            publishedAt: raw.publishedAt,
+            url: raw.url,
+            rawSnippet,
+            rawContent: enriched.rawContent,
+            contentSourceType: enriched.contentSourceType,
+            contentDepthScore: enriched.contentDepthScore,
+            processFailureReason: "empty_content",
+            processedAt: null,
+          });
+          continue;
+        }
+
         if (!passesNoiseFilter(raw.title, enriched.rawContent)) {
           noiseFiltered++;
           req.log.info(
@@ -69,6 +96,7 @@ router.post("/refresh", async (req, res): Promise<void> => {
             rawContent: enriched.rawContent,
             contentSourceType: enriched.contentSourceType,
             contentDepthScore: enriched.contentDepthScore,
+            processFailureReason: "noise_filtered",
             processedAt: null,
           });
           continue;
@@ -104,6 +132,7 @@ router.post("/refresh", async (req, res): Promise<void> => {
           rawContent: enriched.rawContent,
           contentSourceType: enriched.contentSourceType,
           contentDepthScore: enriched.contentDepthScore,
+          processFailureReason: analysis ? null : "ai_null",
 
           summary: sanitizeNullStr(analysis?.summary),
           sector: sanitizeNullStr(analysis?.sector),
@@ -113,7 +142,7 @@ router.post("/refresh", async (req, res): Promise<void> => {
           whoCares: analysis ? sanitizeNullStr(analysis.whoCares.join(", ")) : null,
 
           cloImpact: analysis?.cloImpact ?? false,
-          issuerName: sanitizeNullStr(analysis?.issuerName),
+          issuerName: sanitizeIssuer(analysis?.issuerName),
 
           urgencyScore: analysis?.urgencyScore ?? null,
           covenantFlag: analysis?.covenantFlag ?? false,
@@ -312,7 +341,8 @@ router.post("/refresh/backfill", async (req, res): Promise<void> => {
             whyItMatters: sanitizeNullStr(analysis.whyItMatters),
             whoCares: sanitizeNullStr(analysis.whoCares.join(", ")),
             cloImpact: analysis.cloImpact,
-            issuerName: sanitizeNullStr(analysis.issuerName),
+            issuerName: sanitizeIssuer(analysis.issuerName),
+            processFailureReason: null,
             urgencyScore: analysis.urgencyScore,
             covenantFlag: analysis.covenantFlag,
             ratingMentioned: sanitizeNullStr(analysis.ratingMentioned),

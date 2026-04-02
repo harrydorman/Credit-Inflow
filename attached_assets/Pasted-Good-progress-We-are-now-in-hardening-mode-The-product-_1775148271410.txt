@@ -1,0 +1,73 @@
+Good progress. We are now in hardening mode.
+
+The product wedge remains:
+“AI-powered detection of credit deterioration, with evidence and actionable insight.”
+
+Next implementation sprint priorities, in order:
+
+1. Scheduled auto-ingestion
+- Add safe automatic ingestion on a fixed interval (start with hourly)
+- Must be failure-tolerant and not spawn overlapping runs
+- Add logging for start, success, failure, and duration
+- Preserve manual refresh functionality
+
+2. Processing coverage / failure classification
+- Investigate the 33 unprocessed articles
+- Classify each unprocessed article into a reason bucket:
+  - filtered by keyword noise filter
+  - AI returned null
+  - parse/JSON failure
+  - timeout/API error
+  - missing/insufficient content
+- Add this reason to observability/debug stats
+- Add a retry/backfill mechanism for recoverable failures
+- Do not blindly force-process low-quality noise
+
+3. Issuer normalization and extraction hardening
+- Introduce a canonical issuer mapping strategy
+- Normalize variants like:
+  - Nike
+  - NIKE
+  - Nike Inc.
+  - Nike, Inc.
+- Add a helper/table or mapping layer for canonical issuer names
+- Improve issuer extraction coverage where possible without inventing issuers
+- Preserve null issuer for true macro/non-issuer articles
+
+4. Frontend article detail route
+- Build a real /article/:id frontend page if not already present
+- Connect article cards, signal cards, and issuer pages into a complete navigation loop:
+  signal -> article -> issuer
+- Use the existing API detail response fully:
+  trust profile
+  evidence ledger
+  credit summary
+  trade implications
+  score explanation
+
+5. Observability improvements
+- Expand the debug/ingestion stats endpoint to include:
+  - processed vs unprocessed by reason
+  - enrichment success rate
+  - issuer extraction coverage
+  - average content depth by source
+  - articles with/without trade implications
+- Keep this lightweight and internal-facing
+
+Engineering instructions:
+- Make changes in batches:
+  1) scheduled ingestion + locking
+  2) failure classification + observability
+  3) issuer normalization
+  4) frontend article route
+- Validate after each batch
+- Keep a running changelog in IMPLEMENTATION_NOTES.md
+- Preserve current working behavior
+- Prefer explicit logging and null-safe fallbacks over silent failure
+
+Final output:
+1. plan
+2. files changed
+3. validation results
+4. remaining limitations
+5. next top 5 priorities
