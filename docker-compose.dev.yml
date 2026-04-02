@@ -1,0 +1,45 @@
+# Local development database for non-Replit environments.
+#
+# Usage:
+#   1. Start the database:
+#        docker-compose -f docker-compose.dev.yml up -d
+#
+#   2. Export the connection string:
+#        export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/credit_intel
+#
+#   3. Push the schema:
+#        pnpm --filter @workspace/db run push
+#
+#   4. Start the API server (in a separate terminal):
+#        export PORT=8080
+#        export OPENAI_API_KEY=sk-...
+#        pnpm --filter @workspace/api-server run dev
+#
+#   5. Start the frontend (in a separate terminal):
+#        pnpm --filter @workspace/credit-dashboard run dev
+#
+# Stop and remove containers:
+#   docker-compose -f docker-compose.dev.yml down
+#
+# Stop and remove containers + data volume (full reset):
+#   docker-compose -f docker-compose.dev.yml down -v
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: credit_intel
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d credit_intel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

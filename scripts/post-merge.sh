@@ -1,4 +1,5 @@
 #!/bin/bash
+# Replit post-merge hook — runs after a task-agent branch is merged.
+# Delegates to the general-purpose setup script.
 set -e
-pnpm install --frozen-lockfile
-pnpm --filter db push
+bash "$(dirname "$0")/setup.sh"
