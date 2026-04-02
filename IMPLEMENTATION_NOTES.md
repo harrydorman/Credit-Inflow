@@ -276,6 +276,162 @@ Contains `CANONICAL_MAP: Record<string, string>` with 60+ variant → canonical 
 
 ---
 
+## Sprint: Platform Restructuring (April 2, 2026 — GitHub Export Readiness)
+
+---
+
+### Overview
+
+Goal: make the repo cloneable and runnable outside Replit without changing app logic, schema, or deployment architecture. Structured as four batches, each independently validatable.
+
+---
+
+### Batch 1 — Repo Hygiene
+
+**Goal:** Add the files a new contributor needs on first clone.
+
+**Files created:**
+
+- **`.gitignore`** — Added Replit-specific exclusions: `.replit`, `replit.nix`, `.upm/`, `.cache/`, `attached_assets/`, `.local/`. Preserved existing Node/pnpm/dist patterns.
+- **`.env.example`** — Documents all 9 environment variables with `[REQUIRED]` / `[OPTIONAL]` / `[DEFAULT: ...]` markers. Covers: `DATABASE_URL`, `OPENAI_API_KEY`, `AI_INTEGRATIONS_OPENAI_*` (Replit-only), `NEWS_API_KEY`, `SESSION_SECRET`, `API_PORT`, `PORT`, `BASE_PATH`. Cross-references `docker-compose.dev.yml`.
+- **`docker-compose.dev.yml`** — PostgreSQL 16 Alpine container at `localhost:5432` with a `pgdata` named volume, health check, and inline step-by-step usage comments. All connection values match `.env.example` defaults.
+- **`scripts/setup.sh`** — Idempotent setup: `pnpm install --frozen-lockfile` then `pnpm --filter @workspace/db run push`. Works identically on Replit (post-merge) and locally (post-clone).
+- **`scripts/post-merge.sh`** — Delegates entirely to `setup.sh`. Called automatically by the Replit platform after a task-agent merge is approved.
+
+**No application logic changed.**
+
+---
+
+### Batch 2 — Cross-Platform pnpm Install
+
+**Goal:** Remove platform-specific package exclusions so `pnpm install` works on linux-x64, macOS arm64, and macOS x64 without manual intervention.
+
+**File changed:** `pnpm-workspace.yaml`
+
+**What changed:** Removed 79 lines of `"-"` package exclusion entries covering platform-specific binaries: `esbuild-*`, `@esbuild/*`, `lightningcss-*`, `@tailwindcss/oxide-*`, `rollup/rollup-*`, `@expo/ngrok-bin-*`. These exclusions were preventing pnpm from installing the correct native binaries for non-linux-x64 platforms.
+
+**Retained:**
+- `"@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"` — redirects a drizzle-kit internal dep to tsx (security/compatibility override)
+- `esbuild: "0.27.3"` — pins esbuild to the version `build.mjs` is tested against
+
+**Verified:** Zero lockfile churn on linux-x64 after removal. pnpm resolves platform natives correctly via its built-in `onlyBuiltDependencies` mechanism.
+
+---
+
+### Batch 3A — Backend Config Centralization
+
+**Goal:** Eliminate scattered `process.env.*` reads for ports, OpenAI keys, and NewsAPI key across the backend. Single source of truth for all environment configuration.
+
+**New file:** `artifacts/api-server/src/lib/config.ts`
+
+```typescript
+export const config = {
+  port: ...,         // process.env.PORT → process.env.API_PORT → "8080"
+  openai: {
+    apiKey: ...,     // AI_INTEGRATIONS_OPENAI_API_KEY → OPENAI_API_KEY
+    baseUrl: ...,    // AI_INTEGRATIONS_OPENAI_BASE_URL → "https://api.openai.com/v1"
+  },
+  newsApiKey: ...,   // process.env.NEWS_API_KEY (optional)
+} as const;
+```
+
+Port resolution validates the parsed value and names which env var produced an invalid result in the thrown error message.
+
+**Files updated:**
+
+| File | Change |
+|---|---|
+| `artifacts/api-server/src/index.ts` | Removed 13-line PORT parsing block; imports `config.port` |
+| `artifacts/api-server/src/lib/aiProcessing.ts` | Replaced 2 inline env reads with `config.openai.*` |
+| `artifacts/api-server/src/routes/issuerThesis.ts` | Same — eliminated duplicate of the above 2 lines |
+| `artifacts/api-server/src/lib/dataProviders.ts` | `private readonly apiKey = config.newsApiKey` |
+| `artifacts/api-server/src/lib/newsIngestion.ts` | `const NEWS_API_KEY = config.newsApiKey` |
+
+**Intentionally not changed:**
+- `logger.ts` — `LOG_LEVEL` and `NODE_ENV` reads are already correct, have no duplication, and adding a `config` import would create a subtle module initialization ordering dependency.
+- `lib/db` — `DATABASE_URL` is read at module import time; restructuring would require touching all consumers and is deferred.
+
+**Validation:** TypeScript typecheck passes (0 errors after rebuilding project-referenced lib packages). API server restarts in 194ms. `/api/healthz` returns `{"status":"ok"}`. grep confirms zero `process.env.PORT`, `process.env.OPENAI*`, or `process.env.NEWS_API_KEY` reads outside `config.ts`.
+
+---
+
+### Batch 3B — Frontend Vite Portability
+
+**Goal:** Make the Vite config runnable without `PORT` and `BASE_PATH` being set, and add a dev-only API proxy for local development.
+
+**File changed:** `artifacts/credit-dashboard/vite.config.ts`
+
+**Changes:**
+
+1. **PORT** — Removed hard throw on missing `PORT`; replaced with safe fallback to `5173`. Invalid-but-set values still throw.
+
+2. **BASE_PATH** — Removed hard throw on missing `BASE_PATH`; replaced with `?? "/"` default. Added `hasBasePath` boolean.
+
+3. **Dev proxy** — Added conditional proxy block to `server` config:
+   ```typescript
+   ...(!hasBasePath && {
+     proxy: {
+       "/api": {
+         target: `http://localhost:${apiPort}`,
+         changeOrigin: true,
+       },
+     },
+   })
+   ```
+   `apiPort` reads `process.env.API_PORT ?? 8080`. The proxy activates only when `BASE_PATH` is not set (i.e., outside Replit). On Replit, `BASE_PATH` is platform-injected, disabling the proxy automatically.
+
+**Unchanged:** `base`, `plugins` array, `REPL_ID` guard for Replit plugins, `runtimeErrorOverlay`, `cartographer`, `devBanner`, `resolve.alias`, `resolve.dedupe`, `root`, `build.outDir`, `server.host`, `server.allowedHosts`, `server.fs.*`, `preview.*`.
+
+**Validation:** Frontend workflow restarts cleanly (`VITE v7.3.1 ready in 589 ms`). Browser connects. No application source files changed. Replit plugin guard (`REPL_ID !== undefined`) intact.
+
+**Note on proxy in Replit dev environment:** `BASE_PATH` is not injected by Replit during development (only in the path-routing layer above Vite), so the proxy is active in the current Replit dev setup. This is harmless — it proxies `localhost:{vite-port}/api → localhost:8080`, which is where the API server runs. Setting `BASE_PATH=/credit-dashboard` in the workflow environment would disable the proxy on Replit dev, but this is not required for correctness.
+
+---
+
+### Batch 4 — Documentation (This Batch)
+
+**Goal:** Create GitHub-quality documentation so an external developer can understand and run the repo without Replit-specific knowledge.
+
+**Files created/updated:**
+
+- **`README.md`** (new) — Full external developer guide. Sections: product description, repo structure tree, environment variable table, local development quickstart (6 steps), seeding instructions, frontend-to-backend communication (local vs Replit), Replit vs local comparison table, observability endpoints, key architectural decisions, current limitations, deferred work, and a useful commands reference.
+- **`IMPLEMENTATION_NOTES.md`** (this update) — Platform restructuring sprint added as a new top-level section covering all four batches with exact file changes, rationale, and validation results.
+
+**No application logic changed. No schema changed.**
+
+---
+
+### Platform Restructuring — Validated State
+
+| Check | Result |
+|---|---|
+| `pnpm install` on linux-x64 | ✅ Zero lockfile churn after removing platform exclusion lines |
+| API server typecheck | ✅ 0 errors (with lib packages pre-built) |
+| API server build | ✅ 194ms, 2.3mb bundle |
+| API server `/api/healthz` | ✅ `{"status":"ok"}` |
+| Frontend cold start | ✅ `VITE v7.3.1 ready in 589ms`, browser connects |
+| `process.env.*` reads outside `config.ts` (api-server) | ✅ Only `logger.ts` lines for `NODE_ENV` and `LOG_LEVEL` |
+| Replit plugin guard intact | ✅ `REPL_ID !== undefined` on cartographer/devBanner |
+| `.env.example` complete | ✅ All 9 env vars documented with context |
+| `docker-compose.dev.yml` complete | ✅ Health check, volume, inline usage comments |
+| `setup.sh` idempotent | ✅ install + push, safe to re-run |
+| `README.md` created | ✅ Full external developer guide |
+
+---
+
+### Deferred from This Sprint
+
+| Item | Status |
+|---|---|
+| Rename `artifacts/` → `apps/` | Deferred — no current blocker, requires workflow config updates |
+| Split API to separate deployment domain | Deferred — deployment architecture not finalized |
+| DB package lazy init (`DATABASE_URL` reads at import time) | Deferred — requires touching all DB consumers |
+| Drizzle migration files (replace push mode) | Deferred — planned for production hardening phase |
+| GitHub Actions CI/CD scaffolding | Deferred — pending repo export |
+| Auth layer | Deferred — implementation approach not chosen |
+
+---
+
 ## Codebase Map
 ```
 lib/db/src/schema/articles.ts          — DB schema (108 lines, 50+ columns)
