@@ -157,7 +157,10 @@ router.get("/watchlists/:id/articles", async (req, res): Promise<void> => {
   }
 
   const items = await db
-    .select({ normalizedIssuerName: watchlistItemsTable.normalizedIssuerName })
+    .select({
+      issuerName: watchlistItemsTable.issuerName,
+      normalizedIssuerName: watchlistItemsTable.normalizedIssuerName,
+    })
     .from(watchlistItemsTable)
     .where(eq(watchlistItemsTable.watchlistId, params.data.id));
 
@@ -166,7 +169,14 @@ router.get("/watchlists/:id/articles", async (req, res): Promise<void> => {
     return;
   }
 
-  const issuerNames = items.map((i: { normalizedIssuerName: string }) => i.normalizedIssuerName);
+  // Build a deduplicated set of both raw and normalized names so we match
+  // articles regardless of whether they were stored pre- or post-canonicalization.
+  const issuerNameSet = new Set<string>();
+  for (const item of items) {
+    issuerNameSet.add(item.issuerName);
+    issuerNameSet.add(item.normalizedIssuerName);
+  }
+  const issuerNames = Array.from(issuerNameSet);
 
   const [{ total }] = await db
     .select({ total: count() })
