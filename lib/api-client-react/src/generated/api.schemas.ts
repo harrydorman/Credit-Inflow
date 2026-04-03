@@ -441,6 +441,38 @@ export interface RefreshResult {
   message: string;
 }
 
+export interface Watchlist {
+  id: number;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WatchlistList {
+  watchlists: Watchlist[];
+  total: number;
+}
+
+export interface WatchlistItem {
+  id: number;
+  watchlistId: number;
+  issuerName: string;
+  normalizedIssuerName: string;
+  addedAt: string;
+}
+
+export interface CreateWatchlistRequest {
+  name: string;
+  /** @nullable */
+  description?: string | null;
+}
+
+export interface AddWatchlistItemRequest {
+  issuerName: string;
+}
+
 export type ListArticlesParams = {
   sector?: string;
   eventType?: string;
@@ -455,4 +487,8 @@ export type ListArticlesParams = {
 
 export type GetTrendsParams = {
   windowHours?: number;
+};
+
+export type GetWatchlistArticlesParams = {
+  limit?: number;
 };

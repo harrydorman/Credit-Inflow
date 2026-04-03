@@ -311,6 +311,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /watchlists/{id}/items/{issuerName}:
     delete:
       operationId: removeWatchlistItem
       tags: [watchlists]
@@ -322,7 +324,7 @@ paths:
           schema:
             type: integer
         - name: issuerName
-          in: query
+          in: path
           required: true
           schema:
             type: string
