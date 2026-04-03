@@ -171,10 +171,11 @@ router.get("/watchlists/:id/articles", async (req, res): Promise<void> => {
 
   // Build a deduplicated set of both raw and normalized names so we match
   // articles regardless of whether they were stored pre- or post-canonicalization.
+  // Guard against any unexpected null/undefined values before adding to the set.
   const issuerNameSet = new Set<string>();
   for (const item of items) {
-    issuerNameSet.add(item.issuerName);
-    issuerNameSet.add(item.normalizedIssuerName);
+    if (item.issuerName) issuerNameSet.add(item.issuerName);
+    if (item.normalizedIssuerName) issuerNameSet.add(item.normalizedIssuerName);
   }
   const issuerNames = Array.from(issuerNameSet);
 
