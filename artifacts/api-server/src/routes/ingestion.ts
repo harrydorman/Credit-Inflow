@@ -8,6 +8,7 @@ import { getETFSnapshot, validateWithMarketData } from "../lib/marketData";
 import { logger } from "../lib/logger";
 import { enrichContent } from "../lib/contentEnricher";
 import { canonicalizeIssuer } from "../lib/canonicalIssuers";
+import { evaluateAlerts } from "../lib/alertEvaluation";
 
 function sanitizeNullStr(val: string | null | undefined): string | null {
   if (val === null || val === undefined) return null;
@@ -158,7 +159,7 @@ router.post("/refresh", async (req, res): Promise<void> => {
           );
         }
 
-        await db.insert(articlesTable).values({
+        const [persisted] = await db.insert(articlesTable).values({
           title: raw.title,
           source: raw.source,
           publishedAt: raw.publishedAt,
@@ -226,9 +227,34 @@ router.post("/refresh", async (req, res): Promise<void> => {
           scoreExplanationJson: analysis?.scoreExplanation ?? null,
 
           processedAt: analysis ? new Date() : null,
+        }).returning({
+          id: articlesTable.id,
+          issuerName: articlesTable.issuerName,
+          finalUrgencyScore: articlesTable.finalUrgencyScore,
+          eventType: articlesTable.eventType,
+          covenantFlag: articlesTable.covenantFlag,
         });
 
         if (analysis) processed++;
+
+        // Trigger alert evaluation for articles that have a matched issuer.
+        // Uses fields from the just-inserted row — no extra query needed.
+        // evaluateAlerts is self-contained and never throws — failures are logged
+        // internally and do not affect the ingestion result.
+        if (analysis && persisted?.issuerName) {
+          const alertCount = await evaluateAlerts({
+            id: persisted.id,
+            issuerName: persisted.issuerName,
+            title: raw.title,
+            finalUrgencyScore: persisted.finalUrgencyScore,
+            eventType: persisted.eventType,
+            covenantFlag: persisted.covenantFlag ?? false,
+          });
+          if (alertCount > 0) {
+            req.log.info({ articleId: persisted.id, alertCount }, "Alert events created");
+          }
+        }
+
         await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (err) {
         logger.error({ err, url: raw.url }, "Error processing article");

@@ -478,6 +478,70 @@ export interface AddWatchlistItemRequest {
   issuerName: string;
 }
 
+export interface AlertRule {
+  id: number;
+  watchlistId: number;
+  name: string;
+  isActive: boolean;
+  /**
+   * @minimum 1
+   * @maximum 10
+   * @nullable
+   */
+  minimumUrgency?: number | null;
+  /**
+   * @minItems 1
+   * @nullable
+   */
+  eventTypes?: string[] | null;
+  covenantFlagOnly: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AlertRuleList {
+  rules: AlertRule[];
+  total: number;
+}
+
+export interface AlertEvent {
+  id: number;
+  alertRuleId: number;
+  watchlistId: number;
+  articleId: number;
+  issuerName: string;
+  title: string;
+  /** @nullable */
+  urgency?: number | null;
+  /** @nullable */
+  eventType?: string | null;
+  triggeredAt: string;
+  isRead: boolean;
+}
+
+export interface AlertEventList {
+  alerts: AlertEvent[];
+  total: number;
+}
+
+export interface CreateAlertRuleRequest {
+  watchlistId: number;
+  name: string;
+  isActive?: boolean;
+  /**
+   * @minimum 1
+   * @maximum 10
+   * @nullable
+   */
+  minimumUrgency?: number | null;
+  /**
+   * @minItems 1
+   * @nullable
+   */
+  eventTypes?: string[] | null;
+  covenantFlagOnly?: boolean;
+}
+
 export type ListArticlesParams = {
   sector?: string;
   eventType?: string;
@@ -496,4 +560,15 @@ export type GetTrendsParams = {
 
 export type GetWatchlistArticlesParams = {
   limit?: number;
+};
+
+export type ListAlertEventsParams = {
+  watchlistId?: number;
+  isRead?: boolean;
+  limit?: number;
+  offset?: number;
+};
+
+export type ListAlertRulesParams = {
+  watchlistId?: number;
 };

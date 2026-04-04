@@ -7,12 +7,17 @@
  */
 
 export * from "./addWatchlistItemRequest";
+export * from "./alertEvent";
+export * from "./alertEventList";
+export * from "./alertRule";
+export * from "./alertRuleList";
 export * from "./article";
 export * from "./articleConfidenceScore";
 export * from "./articleCreditSummaryJson";
 export * from "./articleList";
 export * from "./articleMarketValidationSignal";
 export * from "./articleScoreExplanationJson";
+export * from "./createAlertRuleRequest";
 export * from "./createWatchlistRequest";
 export * from "./dailyBrief";
 export * from "./dailyBriefItem";
@@ -27,6 +32,8 @@ export * from "./issuerSignal";
 export * from "./issuerSignalRiskTrend";
 export * from "./issuerThesis";
 export * from "./issuerThesisCreditView";
+export * from "./listAlertEventsParams";
+export * from "./listAlertRulesParams";
 export * from "./listArticlesParams";
 export * from "./marketOverview";
 export * from "./marketOverviewArticleCounts";

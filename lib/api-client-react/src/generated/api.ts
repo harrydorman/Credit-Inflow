@@ -18,8 +18,13 @@ import type {
 
 import type {
   AddWatchlistItemRequest,
+  AlertEvent,
+  AlertEventList,
+  AlertRule,
+  AlertRuleList,
   Article,
   ArticleList,
+  CreateAlertRuleRequest,
   CreateWatchlistRequest,
   DailyBrief,
   ErrorResponse,
@@ -28,6 +33,8 @@ import type {
   HealthStatus,
   IssuerList,
   IssuerThesis,
+  ListAlertEventsParams,
+  ListAlertRulesParams,
   ListArticlesParams,
   MarketOverview,
   RefreshResult,
@@ -1475,3 +1482,361 @@ export function useGetWatchlistArticles<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List triggered alert events, newest first
+ */
+export const getListAlertEventsUrl = (params?: ListAlertEventsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/alerts?${stringifiedParams}`
+    : `/api/alerts`;
+};
+
+export const listAlertEvents = async (
+  params?: ListAlertEventsParams,
+  options?: RequestInit,
+): Promise<AlertEventList> => {
+  return customFetch<AlertEventList>(getListAlertEventsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAlertEventsQueryKey = (params?: ListAlertEventsParams) => {
+  return [`/api/alerts`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAlertEventsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAlertEvents>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAlertEventsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAlertEvents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAlertEventsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAlertEvents>>> = ({
+    signal,
+  }) => listAlertEvents(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAlertEvents>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAlertEventsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAlertEvents>>
+>;
+export type ListAlertEventsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List triggered alert events, newest first
+ */
+
+export function useListAlertEvents<
+  TData = Awaited<ReturnType<typeof listAlertEvents>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAlertEventsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAlertEvents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAlertEventsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List all alert rules
+ */
+export const getListAlertRulesUrl = (params?: ListAlertRulesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/alerts/rules?${stringifiedParams}`
+    : `/api/alerts/rules`;
+};
+
+export const listAlertRules = async (
+  params?: ListAlertRulesParams,
+  options?: RequestInit,
+): Promise<AlertRuleList> => {
+  return customFetch<AlertRuleList>(getListAlertRulesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAlertRulesQueryKey = (params?: ListAlertRulesParams) => {
+  return [`/api/alerts/rules`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAlertRulesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAlertRules>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAlertRulesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAlertRules>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAlertRulesQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAlertRules>>> = ({
+    signal,
+  }) => listAlertRules(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAlertRules>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAlertRulesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAlertRules>>
+>;
+export type ListAlertRulesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all alert rules
+ */
+
+export function useListAlertRules<
+  TData = Awaited<ReturnType<typeof listAlertRules>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAlertRulesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAlertRules>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAlertRulesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new alert rule
+ */
+export const getCreateAlertRuleUrl = () => {
+  return `/api/alerts/rules`;
+};
+
+export const createAlertRule = async (
+  createAlertRuleRequest: CreateAlertRuleRequest,
+  options?: RequestInit,
+): Promise<AlertRule> => {
+  return customFetch<AlertRule>(getCreateAlertRuleUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createAlertRuleRequest),
+  });
+};
+
+export const getCreateAlertRuleMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAlertRule>>,
+    TError,
+    { data: BodyType<CreateAlertRuleRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createAlertRule>>,
+  TError,
+  { data: BodyType<CreateAlertRuleRequest> },
+  TContext
+> => {
+  const mutationKey = ["createAlertRule"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createAlertRule>>,
+    { data: BodyType<CreateAlertRuleRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createAlertRule(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateAlertRuleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createAlertRule>>
+>;
+export type CreateAlertRuleMutationBody = BodyType<CreateAlertRuleRequest>;
+export type CreateAlertRuleMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create a new alert rule
+ */
+export const useCreateAlertRule = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAlertRule>>,
+    TError,
+    { data: BodyType<CreateAlertRuleRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createAlertRule>>,
+  TError,
+  { data: BodyType<CreateAlertRuleRequest> },
+  TContext
+> => {
+  return useMutation(getCreateAlertRuleMutationOptions(options));
+};
+
+/**
+ * @summary Mark an alert event as read
+ */
+export const getMarkAlertReadUrl = (id: number) => {
+  return `/api/alerts/${id}/read`;
+};
+
+export const markAlertRead = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AlertEvent> => {
+  return customFetch<AlertEvent>(getMarkAlertReadUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getMarkAlertReadMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markAlertRead>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markAlertRead>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["markAlertRead"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markAlertRead>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return markAlertRead(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkAlertReadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markAlertRead>>
+>;
+
+export type MarkAlertReadMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Mark an alert event as read
+ */
+export const useMarkAlertRead = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markAlertRead>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markAlertRead>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getMarkAlertReadMutationOptions(options));
+};
