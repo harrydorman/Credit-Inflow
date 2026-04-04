@@ -721,3 +721,107 @@ export const GetWatchlistArticlesResponse = zod.object({
   ),
   total: zod.number(),
 });
+
+/**
+ * @summary List triggered alert events, newest first
+ */
+export const listAlertEventsQueryLimitDefault = 50;
+export const listAlertEventsQueryOffsetDefault = 0;
+
+export const ListAlertEventsQueryParams = zod.object({
+  watchlistId: zod.coerce.number().optional(),
+  isRead: zod.coerce.boolean().optional(),
+  limit: zod.coerce.number().default(listAlertEventsQueryLimitDefault),
+  offset: zod.coerce.number().default(listAlertEventsQueryOffsetDefault),
+});
+
+export const ListAlertEventsResponse = zod.object({
+  alerts: zod.array(
+    zod.object({
+      id: zod.number(),
+      alertRuleId: zod.number(),
+      watchlistId: zod.number(),
+      articleId: zod.number(),
+      issuerName: zod.string(),
+      title: zod.string(),
+      urgency: zod.number().nullish(),
+      eventType: zod.string().nullish(),
+      triggeredAt: zod.coerce.date(),
+      isRead: zod.boolean(),
+    }),
+  ),
+  total: zod.number(),
+});
+
+/**
+ * @summary List all alert rules
+ */
+export const ListAlertRulesQueryParams = zod.object({
+  watchlistId: zod.coerce.number().optional(),
+});
+
+export const listAlertRulesResponseRulesItemMinimumUrgencyMax = 10;
+
+export const ListAlertRulesResponse = zod.object({
+  rules: zod.array(
+    zod.object({
+      id: zod.number(),
+      watchlistId: zod.number(),
+      name: zod.string(),
+      isActive: zod.boolean(),
+      minimumUrgency: zod
+        .number()
+        .min(1)
+        .max(listAlertRulesResponseRulesItemMinimumUrgencyMax)
+        .nullish(),
+      eventTypes: zod.array(zod.string()).min(1).nullish(),
+      covenantFlagOnly: zod.boolean(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  total: zod.number(),
+});
+
+/**
+ * @summary Create a new alert rule
+ */
+export const createAlertRuleBodyIsActiveDefault = true;
+export const createAlertRuleBodyMinimumUrgencyMax = 10;
+
+export const createAlertRuleBodyCovenantFlagOnlyDefault = false;
+
+export const CreateAlertRuleBody = zod.object({
+  watchlistId: zod.number(),
+  name: zod.string(),
+  isActive: zod.boolean().default(createAlertRuleBodyIsActiveDefault),
+  minimumUrgency: zod
+    .number()
+    .min(1)
+    .max(createAlertRuleBodyMinimumUrgencyMax)
+    .nullish(),
+  eventTypes: zod.array(zod.string()).min(1).nullish(),
+  covenantFlagOnly: zod
+    .boolean()
+    .default(createAlertRuleBodyCovenantFlagOnlyDefault),
+});
+
+/**
+ * @summary Mark an alert event as read
+ */
+export const MarkAlertReadParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const MarkAlertReadResponse = zod.object({
+  id: zod.number(),
+  alertRuleId: zod.number(),
+  watchlistId: zod.number(),
+  articleId: zod.number(),
+  issuerName: zod.string(),
+  title: zod.string(),
+  urgency: zod.number().nullish(),
+  eventType: zod.string().nullish(),
+  triggeredAt: zod.coerce.date(),
+  isRead: zod.boolean(),
+});
