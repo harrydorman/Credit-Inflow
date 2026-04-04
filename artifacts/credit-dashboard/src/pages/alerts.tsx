@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 import { Bell, CheckCheck, ShieldAlert } from "lucide-react";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -415,13 +416,14 @@ function AlertEventsList() {
 
               {/* Content */}
               <div className="flex-1 min-w-0">
-                <p
-                  className={`text-sm font-medium truncate ${
+                <Link
+                  href={`/article/${alert.articleId}`}
+                  className={`text-sm font-medium truncate hover:text-primary transition-colors block ${
                     alert.isRead ? "" : "text-foreground"
                   }`}
                 >
                   {alert.title}
-                </p>
+                </Link>
                 <div className="flex flex-wrap items-center gap-2 mt-1">
                   <span className="text-xs font-mono">{alert.issuerName}</span>
                   {alert.eventType && (
