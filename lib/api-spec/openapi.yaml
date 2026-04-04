@@ -276,6 +276,29 @@ paths:
                 $ref: "#/components/schemas/Watchlist"
 
   /watchlists/{id}/items:
+    get:
+      operationId: getWatchlistItems
+      tags: [watchlists]
+      summary: Get all items (issuers) in a watchlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Items in watchlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchlistItemList"
+        "404":
+          description: Watchlist not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       operationId: addWatchlistItem
       tags: [watchlists]
@@ -1073,6 +1096,19 @@ components:
           type: integer
       required:
         - watchlists
+        - total
+
+    WatchlistItemList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WatchlistItem"
+        total:
+          type: integer
+      required:
+        - items
         - total
 
     WatchlistItem:

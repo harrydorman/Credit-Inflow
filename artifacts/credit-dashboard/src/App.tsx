@@ -12,6 +12,7 @@ import Brief from "@/pages/brief";
 import Issuers from "@/pages/issuers";
 import IssuerDetail from "@/pages/issuer-detail";
 import Sectors from "@/pages/sectors";
+import Watchlists from "@/pages/watchlists";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/brief" component={Brief} />
       <Route path="/issuers" component={Issuers} />
       <Route path="/issuer/:name" component={IssuerDetail} />
+      <Route path="/watchlists" component={Watchlists} />
       <Route component={NotFound} />
     </Switch>
   );

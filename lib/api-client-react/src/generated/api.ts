@@ -36,6 +36,7 @@ import type {
   TrendsDebug,
   Watchlist,
   WatchlistItem,
+  WatchlistItemList,
   WatchlistList,
 } from "./api.schemas";
 
@@ -1102,6 +1103,93 @@ export const useCreateWatchlist = <
 > => {
   return useMutation(getCreateWatchlistMutationOptions(options));
 };
+
+/**
+ * @summary Get all items (issuers) in a watchlist
+ */
+export const getGetWatchlistItemsUrl = (id: number) => {
+  return `/api/watchlists/${id}/items`;
+};
+
+export const getWatchlistItems = async (
+  id: number,
+  options?: RequestInit,
+): Promise<WatchlistItemList> => {
+  return customFetch<WatchlistItemList>(getGetWatchlistItemsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetWatchlistItemsQueryKey = (id: number) => {
+  return [`/api/watchlists/${id}/items`] as const;
+};
+
+export const getGetWatchlistItemsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWatchlistItems>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getWatchlistItems>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetWatchlistItemsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getWatchlistItems>>
+  > = ({ signal }) => getWatchlistItems(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWatchlistItems>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWatchlistItemsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWatchlistItems>>
+>;
+export type GetWatchlistItemsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get all items (issuers) in a watchlist
+ */
+
+export function useGetWatchlistItems<
+  TData = Awaited<ReturnType<typeof getWatchlistItems>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getWatchlistItems>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWatchlistItemsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Add an issuer to a watchlist

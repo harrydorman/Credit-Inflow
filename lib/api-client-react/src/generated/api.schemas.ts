@@ -463,6 +463,11 @@ export interface WatchlistItem {
   addedAt: string;
 }
 
+export interface WatchlistItemList {
+  items: WatchlistItem[];
+  total: number;
+}
+
 export interface CreateWatchlistRequest {
   name: string;
   /** @nullable */

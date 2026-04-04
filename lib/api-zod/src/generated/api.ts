@@ -574,6 +574,26 @@ export const CreateWatchlistBody = zod.object({
 });
 
 /**
+ * @summary Get all items (issuers) in a watchlist
+ */
+export const GetWatchlistItemsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetWatchlistItemsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.number(),
+      watchlistId: zod.number(),
+      issuerName: zod.string(),
+      normalizedIssuerName: zod.string(),
+      addedAt: zod.coerce.date(),
+    }),
+  ),
+  total: zod.number(),
+});
+
+/**
  * @summary Add an issuer to a watchlist
  */
 export const AddWatchlistItemParams = zod.object({
