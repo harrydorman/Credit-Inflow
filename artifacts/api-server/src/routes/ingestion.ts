@@ -8,6 +8,7 @@ import { getETFSnapshot, validateWithMarketData } from "../lib/marketData";
 import { logger } from "../lib/logger";
 import { enrichContent } from "../lib/contentEnricher";
 import { canonicalizeIssuer } from "../lib/canonicalIssuers";
+import { evaluateAlerts } from "../lib/alertEvaluation";
 
 function sanitizeNullStr(val: string | null | undefined): string | null {
   if (val === null || val === undefined) return null;
@@ -159,15 +160,6 @@ router.post("/refresh", async (req, res): Promise<void> => {
         }
 
         await db.insert(articlesTable).values({
-          title: raw.title,
-          source: raw.source,
-          publishedAt: raw.publishedAt,
-          url: raw.url,
-          rawSnippet,
-          rawContent: enriched.rawContent,
-          contentSourceType: enriched.contentSourceType,
-          contentDepthScore: enriched.contentDepthScore,
-          processFailureReason: analysis ? null : "ai_null",
 
           summary: sanitizeNullStr(analysis?.summary),
           sector: sanitizeNullStr(analysis?.sector),
@@ -229,6 +221,35 @@ router.post("/refresh", async (req, res): Promise<void> => {
         });
 
         if (analysis) processed++;
+
+        // Trigger alert evaluation for articles that have a matched issuer.
+        // This runs synchronously so alert events are available immediately.
+        // evaluateAlerts is self-contained and never throws — failures are logged
+        // internally and do not affect the ingestion result.
+        const canonicalIssuer = sanitizeIssuer(analysis?.issuerName);
+        if (analysis && canonicalIssuer) {
+          // We need the persisted article ID. Re-query by URL since it was just inserted.
+          const [persisted] = await db
+            .select({ id: articlesTable.id })
+            .from(articlesTable)
+            .where(eq(articlesTable.url, raw.url))
+            .limit(1);
+
+          if (persisted) {
+            const alertCount = await evaluateAlerts({
+              id: persisted.id,
+              issuerName: canonicalIssuer,
+              title: raw.title,
+              finalUrgencyScore: analysis.finalUrgencyScore ?? null,
+              eventType: sanitizeNullStr(analysis.eventType),
+              covenantFlag: analysis.covenantFlag ?? false,
+            });
+            if (alertCount > 0) {
+              req.log.info({ articleId: persisted.id, alertCount }, "Alert events created");
+            }
+          }
+        }
+
         await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (err) {
         logger.error({ err, url: raw.url }, "Error processing article");
