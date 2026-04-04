@@ -17,7 +17,19 @@ const router: IRouter = Router();
 
 // GET /watchlists
 router.get("/watchlists", async (_req, res): Promise<void> => {
-  const watchlists = await db.select().from(watchlistsTable).orderBy(watchlistsTable.id);
+  const watchlists = await db
+    .select({
+      id: watchlistsTable.id,
+      name: watchlistsTable.name,
+      description: watchlistsTable.description,
+      createdAt: watchlistsTable.createdAt,
+      updatedAt: watchlistsTable.updatedAt,
+      itemCount: count(watchlistItemsTable.id),
+    })
+    .from(watchlistsTable)
+    .leftJoin(watchlistItemsTable, eq(watchlistItemsTable.watchlistId, watchlistsTable.id))
+    .groupBy(watchlistsTable.id)
+    .orderBy(watchlistsTable.id);
   res.json({ watchlists, total: watchlists.length });
 });
 

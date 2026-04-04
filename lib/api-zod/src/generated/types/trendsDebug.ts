@@ -5,9 +5,9 @@
  * Credit Intelligence Dashboard API — Real-time credit risk detection and trade signal platform
  * OpenAPI spec version: 0.3.0
  */
-import type { TrendsDebugEventTypeCounts } from "./trendsDebugEventTypeCounts";
-import type { TrendsDebugNegativeSentimentCounts } from "./trendsDebugNegativeSentimentCounts";
-import type { TrendsDebugSectorCounts } from "./trendsDebugSectorCounts";
+import type { TrendsDebugEventTypeCounts } from './trendsDebugEventTypeCounts';
+import type { TrendsDebugNegativeSentimentCounts } from './trendsDebugNegativeSentimentCounts';
+import type { TrendsDebugSectorCounts } from './trendsDebugSectorCounts';
 
 export interface TrendsDebug {
   articlesAnalyzed: number;

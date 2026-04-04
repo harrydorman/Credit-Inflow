@@ -6,11 +6,11 @@
  * OpenAPI spec version: 0.3.0
  */
 
-export type IssuerSignalRiskTrend =
-  (typeof IssuerSignalRiskTrend)[keyof typeof IssuerSignalRiskTrend];
+export type IssuerSignalRiskTrend = typeof IssuerSignalRiskTrend[keyof typeof IssuerSignalRiskTrend];
+
 
 export const IssuerSignalRiskTrend = {
-  improving: "improving",
-  stable: "stable",
-  deteriorating: "deteriorating",
+  improving: 'improving',
+  stable: 'stable',
+  deteriorating: 'deteriorating',
 } as const;

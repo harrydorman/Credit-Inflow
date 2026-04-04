@@ -599,6 +599,9 @@ function AlertEventsList() {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function Alerts() {
+  const { data: unreadData } = useListAlertEvents({ isRead: false, limit: 1 });
+  const unreadCount = unreadData?.total ?? 0;
+
   return (
     <Layout>
       <div className="p-6 space-y-8 max-w-4xl mx-auto">
@@ -606,6 +609,11 @@ export default function Alerts() {
         <div className="flex items-center gap-2">
           <ShieldAlert className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold tracking-tight">Alerts</h1>
+          {unreadCount > 0 && (
+            <Badge className="font-mono text-xs" aria-label={`${unreadCount} unread alerts`}>
+              {unreadCount} unread
+            </Badge>
+          )}
         </div>
 
         {/* Create rule */}

@@ -7,5 +7,5 @@
  */
 
 export type ListAlertRulesParams = {
-  watchlistId?: number;
+watchlistId?: number;
 };

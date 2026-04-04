@@ -5,10 +5,10 @@
  * Credit Intelligence Dashboard API — Real-time credit risk detection and trade signal platform
  * OpenAPI spec version: 0.3.0
  */
-import type { ArticleConfidenceScore } from "./articleConfidenceScore";
-import type { ArticleCreditSummaryJson } from "./articleCreditSummaryJson";
-import type { ArticleMarketValidationSignal } from "./articleMarketValidationSignal";
-import type { ArticleScoreExplanationJson } from "./articleScoreExplanationJson";
+import type { ArticleConfidenceScore } from './articleConfidenceScore';
+import type { ArticleCreditSummaryJson } from './articleCreditSummaryJson';
+import type { ArticleMarketValidationSignal } from './articleMarketValidationSignal';
+import type { ArticleScoreExplanationJson } from './articleScoreExplanationJson';
 
 export interface Article {
   id: number;

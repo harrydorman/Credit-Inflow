@@ -7,5 +7,5 @@
  */
 
 export type GetWatchlistArticlesParams = {
-  limit?: number;
+limit?: number;
 };
