@@ -832,6 +832,45 @@ export const ToggleAlertRuleResponse = zod.object({
 });
 
 /**
+ * @summary Update an existing alert rule
+ */
+export const UpdateAlertRuleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const updateAlertRuleBodyMinimumUrgencyMax = 10;
+
+export const UpdateAlertRuleBody = zod.object({
+  name: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+  minimumUrgency: zod
+    .number()
+    .min(1)
+    .max(updateAlertRuleBodyMinimumUrgencyMax)
+    .nullish(),
+  eventTypes: zod.array(zod.string()).min(1).nullish(),
+  covenantFlagOnly: zod.boolean().optional(),
+});
+
+export const updateAlertRuleResponseMinimumUrgencyMax = 10;
+
+export const UpdateAlertRuleResponse = zod.object({
+  id: zod.number(),
+  watchlistId: zod.number(),
+  name: zod.string(),
+  isActive: zod.boolean(),
+  minimumUrgency: zod
+    .number()
+    .min(1)
+    .max(updateAlertRuleResponseMinimumUrgencyMax)
+    .nullish(),
+  eventTypes: zod.array(zod.string()).min(1).nullish(),
+  covenantFlagOnly: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
  * @summary Delete an alert rule
  */
 export const DeleteAlertRuleParams = zod.object({
