@@ -6,6 +6,7 @@ import {
   AddWatchlistItemParams,
   AddWatchlistItemBody,
   RemoveWatchlistItemParams,
+  GetWatchlistItemsParams,
   GetWatchlistArticlesParams,
   GetWatchlistArticlesQueryParams,
 } from "@workspace/api-zod";
@@ -34,6 +35,34 @@ router.post("/watchlists", async (req, res): Promise<void> => {
     .returning();
 
   res.status(201).json(created);
+});
+
+// GET /watchlists/:id/items
+router.get("/watchlists/:id/items", async (req, res): Promise<void> => {
+  const params = GetWatchlistItemsParams.safeParse({ id: req.params.id });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [watchlist] = await db
+    .select()
+    .from(watchlistsTable)
+    .where(eq(watchlistsTable.id, params.data.id))
+    .limit(1);
+
+  if (!watchlist) {
+    res.status(404).json({ error: "Watchlist not found" });
+    return;
+  }
+
+  const items = await db
+    .select()
+    .from(watchlistItemsTable)
+    .where(eq(watchlistItemsTable.watchlistId, params.data.id))
+    .orderBy(desc(watchlistItemsTable.addedAt));
+
+  res.json({ items, total: items.length });
 });
 
 // POST /watchlists/:id/items

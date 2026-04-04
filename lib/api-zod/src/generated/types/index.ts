@@ -50,4 +50,5 @@ export * from "./trendsDebugNegativeSentimentCounts";
 export * from "./trendsDebugSectorCounts";
 export * from "./watchlist";
 export * from "./watchlistItem";
+export * from "./watchlistItemList";
 export * from "./watchlistList";

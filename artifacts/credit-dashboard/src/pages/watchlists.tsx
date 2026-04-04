@@ -4,8 +4,10 @@ import {
   useCreateWatchlist,
   useRemoveWatchlistItem,
   useGetWatchlistArticles,
+  useGetWatchlistItems,
   getListWatchlistsQueryKey,
   getGetWatchlistArticlesQueryKey,
+  getGetWatchlistItemsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
@@ -29,11 +31,16 @@ export default function Watchlists() {
     if (watchlistData?.watchlists.length && !selectedId) {
       setSelectedId(watchlistData.watchlists[0].id);
     }
-  }, [watchlistData?.watchlists]);
+  }, [watchlistData?.watchlists, selectedId]);
 
   const { data: articlesData, isLoading: articlesLoading } = useGetWatchlistArticles(
     selectedId ?? 0,
     { limit: 50 },
+    { query: { enabled: selectedId !== null } }
+  );
+
+  const { data: itemsData } = useGetWatchlistItems(
+    selectedId ?? 0,
     { query: { enabled: selectedId !== null } }
   );
 
@@ -52,6 +59,9 @@ export default function Watchlists() {
     if (selectedId !== null) {
       queryClient.invalidateQueries({
         queryKey: getGetWatchlistArticlesQueryKey(selectedId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetWatchlistItemsQueryKey(selectedId),
       });
     }
   };
@@ -139,27 +149,25 @@ export default function Watchlists() {
               </div>
 
               {/* Issuers in this watchlist */}
-              {articlesData && articlesData.articles.length > 0 && (
+              {itemsData && itemsData.items.length > 0 && (
                 <div className="flex flex-wrap gap-2 items-center">
                   <span className="text-xs font-mono text-muted-foreground">ISSUERS:</span>
-                  {Array.from(new Set(articlesData.articles.map((a) => a.issuerName).filter(Boolean))).map(
-                    (name) => (
-                      <Badge
-                        key={name as string}
-                        variant="outline"
-                        className="font-mono text-xs flex items-center gap-1"
+                  {itemsData.items.map((item) => (
+                    <Badge
+                      key={item.id}
+                      variant="outline"
+                      className="font-mono text-xs flex items-center gap-1"
+                    >
+                      {item.issuerName}
+                      <button
+                        className="ml-1 hover:text-destructive transition-colors"
+                        title={`Remove ${item.issuerName} from watchlist`}
+                        onClick={() => handleRemoveItem(selectedId, item.issuerName)}
                       >
-                        {name as string}
-                        <button
-                          className="ml-1 hover:text-destructive transition-colors"
-                          title={`Remove ${name} from watchlist`}
-                          onClick={() => handleRemoveItem(selectedId, name as string)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    )
-                  )}
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
                 </div>
               )}
 
@@ -167,11 +175,17 @@ export default function Watchlists() {
                 <div className="space-y-4">
                   {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
                 </div>
-              ) : !articlesData || articlesData.articles.length === 0 ? (
+              ) : !itemsData || itemsData.items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
                   <BookOpen className="h-8 w-8 opacity-30" />
                   <p className="font-mono text-sm">No issuers added.</p>
                   <p className="text-xs">Add issuers from the Issuers page to track articles here.</p>
+                </div>
+              ) : !articlesData || articlesData.articles.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
+                  <BookOpen className="h-8 w-8 opacity-30" />
+                  <p className="font-mono text-sm">No articles yet.</p>
+                  <p className="text-xs">Articles will appear here when published for your tracked issuers.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
