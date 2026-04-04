@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   useListWatchlists,
   useCreateWatchlist,
@@ -24,6 +24,12 @@ export default function Watchlists() {
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [newName, setNewName] = useState("");
+
+  useEffect(() => {
+    if (watchlistData?.watchlists.length && !selectedId) {
+      setSelectedId(watchlistData.watchlists[0].id);
+    }
+  }, [watchlistData?.watchlists]);
 
   const { data: articlesData, isLoading: articlesLoading } = useGetWatchlistArticles(
     selectedId ?? 0,
@@ -164,8 +170,8 @@ export default function Watchlists() {
               ) : !articlesData || articlesData.articles.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
                   <BookOpen className="h-8 w-8 opacity-30" />
-                  <p className="font-mono text-sm">No articles yet.</p>
-                  <p className="text-xs">Add issuers to this watchlist from the Issuers page.</p>
+                  <p className="font-mono text-sm">No issuers added.</p>
+                  <p className="text-xs">Add issuers from the Issuers page to track articles here.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

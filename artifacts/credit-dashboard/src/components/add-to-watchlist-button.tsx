@@ -3,6 +3,7 @@ import {
   useListWatchlists,
   useAddWatchlistItem,
   getGetWatchlistArticlesQueryKey,
+  getListWatchlistsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -31,6 +32,9 @@ export function AddToWatchlistButton({ issuerName }: AddToWatchlistButtonProps) 
       setAddedIds((prev) => new Set(prev).add(watchlistId));
       queryClient.invalidateQueries({
         queryKey: getGetWatchlistArticlesQueryKey(watchlistId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getListWatchlistsQueryKey(),
       });
       toast({
         title: "Added to watchlist",
