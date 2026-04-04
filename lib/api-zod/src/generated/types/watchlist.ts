@@ -13,4 +13,5 @@ export interface Watchlist {
   description?: string | null;
   createdAt: Date;
   updatedAt: Date;
+  itemCount: number;
 }

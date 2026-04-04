@@ -123,11 +123,9 @@ export default function Watchlists() {
                 >
                   <Bookmark className="h-3.5 w-3.5 mr-2 shrink-0" />
                   <span className="truncate">{w.name}</span>
-                  {selectedId === w.id && itemsData && (
-                    <Badge variant="outline" className="ml-auto font-mono text-xs shrink-0" aria-label={`${itemsData.items.length} issuers`}>
-                      {itemsData.items.length}
-                    </Badge>
-                  )}
+                  <Badge variant="outline" className="ml-auto font-mono text-xs shrink-0" aria-label={`${w.itemCount} issuers`}>
+                    {w.itemCount}
+                  </Badge>
                 </Button>
               ))
             )}

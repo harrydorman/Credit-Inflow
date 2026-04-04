@@ -6,11 +6,11 @@
  * OpenAPI spec version: 0.3.0
  */
 
-export type IssuerThesisCreditView =
-  (typeof IssuerThesisCreditView)[keyof typeof IssuerThesisCreditView];
+export type IssuerThesisCreditView = typeof IssuerThesisCreditView[keyof typeof IssuerThesisCreditView];
+
 
 export const IssuerThesisCreditView = {
-  positive: "positive",
-  negative: "negative",
-  neutral: "neutral",
+  positive: 'positive',
+  negative: 'negative',
+  neutral: 'neutral',
 } as const;

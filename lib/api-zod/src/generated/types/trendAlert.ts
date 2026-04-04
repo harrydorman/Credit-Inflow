@@ -5,9 +5,9 @@
  * Credit Intelligence Dashboard API — Real-time credit risk detection and trade signal platform
  * OpenAPI spec version: 0.3.0
  */
-import type { TrendAlertSeverity } from "./trendAlertSeverity";
-import type { TrendAlertTrendStrength } from "./trendAlertTrendStrength";
-import type { TrendAlertType } from "./trendAlertType";
+import type { TrendAlertSeverity } from './trendAlertSeverity';
+import type { TrendAlertTrendStrength } from './trendAlertTrendStrength';
+import type { TrendAlertType } from './trendAlertType';
 
 export interface TrendAlert {
   type: TrendAlertType;

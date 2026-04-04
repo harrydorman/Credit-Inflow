@@ -6,11 +6,11 @@
  * OpenAPI spec version: 0.3.0
  */
 
-export type TrendAlertTrendStrength =
-  (typeof TrendAlertTrendStrength)[keyof typeof TrendAlertTrendStrength];
+export type TrendAlertTrendStrength = typeof TrendAlertTrendStrength[keyof typeof TrendAlertTrendStrength];
+
 
 export const TrendAlertTrendStrength = {
-  increasing: "increasing",
-  stable: "stable",
-  weakening: "weakening",
+  increasing: 'increasing',
+  stable: 'stable',
+  weakening: 'weakening',
 } as const;

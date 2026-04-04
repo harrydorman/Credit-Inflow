@@ -5,7 +5,7 @@
  * Credit Intelligence Dashboard API — Real-time credit risk detection and trade signal platform
  * OpenAPI spec version: 0.3.0
  */
-import type { IssuerThesisCreditView } from "./issuerThesisCreditView";
+import type { IssuerThesisCreditView } from './issuerThesisCreditView';
 
 export interface IssuerThesis {
   issuer: string;
