@@ -208,6 +208,7 @@ function CreateRuleForm() {
 // ─── RulesList ───────────────────────────────────────────────────────────────
 
 function RulesList() {
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data, isLoading } = useListAlertRules();
   const { data: watchlistData } = useListWatchlists();
@@ -218,13 +219,22 @@ function RulesList() {
     watchlistData?.watchlists.find((w) => w.id === id)?.name ?? `#${id}`;
 
   const handleToggle = async (id: number) => {
-    await toggleRule.mutateAsync({ id });
-    queryClient.invalidateQueries({ queryKey: getListAlertRulesQueryKey() });
+    try {
+      await toggleRule.mutateAsync({ id });
+      queryClient.invalidateQueries({ queryKey: getListAlertRulesQueryKey() });
+    } catch {
+      toast({ title: "Failed to update rule", variant: "destructive" });
+    }
   };
 
   const handleDelete = async (id: number) => {
-    await deleteRule.mutateAsync({ id });
-    queryClient.invalidateQueries({ queryKey: getListAlertRulesQueryKey() });
+    if (!window.confirm("Delete this alert rule? This cannot be undone.")) return;
+    try {
+      await deleteRule.mutateAsync({ id });
+      queryClient.invalidateQueries({ queryKey: getListAlertRulesQueryKey() });
+    } catch {
+      toast({ title: "Failed to delete rule", variant: "destructive" });
+    }
   };
 
   if (isLoading) {
