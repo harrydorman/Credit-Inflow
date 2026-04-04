@@ -21,6 +21,7 @@ import {
   Clock,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
+import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -274,6 +275,7 @@ export default function IssuerDetail() {
                     ⚠ COVENANT FLAG
                   </Badge>
                 )}
+                <AddToWatchlistButton issuerName={data.issuerName} />
               </div>
             </div>
 

@@ -6,6 +6,7 @@ import { useLocation } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
+import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 
 export default function Issuers() {
   const { data, isLoading } = useListIssuers();
@@ -125,6 +126,7 @@ export default function Issuers() {
                     <TableHead className="font-mono text-xs">LATEST SIGNAL</TableHead>
                     <TableHead className="font-mono text-xs text-center">TREND</TableHead>
                     <TableHead className="font-mono text-xs text-right">RISK SCORE</TableHead>
+                    <TableHead className="font-mono text-xs w-[80px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -200,12 +202,15 @@ export default function Issuers() {
                             </div>
                           </div>
                         </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <AddToWatchlistButton issuerName={issuer.issuerName} />
+                        </TableCell>
                       </TableRow>
                     );
                   })}
                   {data.issuers.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                         No issuers data available.
                       </TableCell>
                     </TableRow>
