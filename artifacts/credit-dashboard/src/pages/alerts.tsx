@@ -332,7 +332,7 @@ function AlertEventsList() {
   const params: Parameters<typeof useListAlertEvents>[0] = {
     limit: 100,
     ...(showUnreadOnly ? { isRead: false } : {}),
-    ...(watchlistFilter !== "" ? { watchlistId: parseInt(watchlistFilter, 10) } : {}),
+    ...(watchlistFilter !== "" ? { watchlistId: Number(watchlistFilter) } : {}),
   };
   const { data, isLoading } = useListAlertEvents(params);
 
