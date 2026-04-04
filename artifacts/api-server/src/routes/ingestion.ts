@@ -159,7 +159,16 @@ router.post("/refresh", async (req, res): Promise<void> => {
           );
         }
 
-        await db.insert(articlesTable).values({
+        const [persisted] = await db.insert(articlesTable).values({
+          title: raw.title,
+          source: raw.source,
+          publishedAt: raw.publishedAt,
+          url: raw.url,
+          rawSnippet,
+          rawContent: enriched.rawContent,
+          contentSourceType: enriched.contentSourceType,
+          contentDepthScore: enriched.contentDepthScore,
+          processFailureReason: analysis ? null : "ai_null",
 
           summary: sanitizeNullStr(analysis?.summary),
           sector: sanitizeNullStr(analysis?.sector),
@@ -218,35 +227,31 @@ router.post("/refresh", async (req, res): Promise<void> => {
           scoreExplanationJson: analysis?.scoreExplanation ?? null,
 
           processedAt: analysis ? new Date() : null,
+        }).returning({
+          id: articlesTable.id,
+          issuerName: articlesTable.issuerName,
+          finalUrgencyScore: articlesTable.finalUrgencyScore,
+          eventType: articlesTable.eventType,
+          covenantFlag: articlesTable.covenantFlag,
         });
 
         if (analysis) processed++;
 
         // Trigger alert evaluation for articles that have a matched issuer.
-        // This runs synchronously so alert events are available immediately.
+        // Uses fields from the just-inserted row — no extra query needed.
         // evaluateAlerts is self-contained and never throws — failures are logged
         // internally and do not affect the ingestion result.
-        const canonicalIssuer = sanitizeIssuer(analysis?.issuerName);
-        if (analysis && canonicalIssuer) {
-          // We need the persisted article ID. Re-query by URL since it was just inserted.
-          const [persisted] = await db
-            .select({ id: articlesTable.id })
-            .from(articlesTable)
-            .where(eq(articlesTable.url, raw.url))
-            .limit(1);
-
-          if (persisted) {
-            const alertCount = await evaluateAlerts({
-              id: persisted.id,
-              issuerName: canonicalIssuer,
-              title: raw.title,
-              finalUrgencyScore: analysis.finalUrgencyScore ?? null,
-              eventType: sanitizeNullStr(analysis.eventType),
-              covenantFlag: analysis.covenantFlag ?? false,
-            });
-            if (alertCount > 0) {
-              req.log.info({ articleId: persisted.id, alertCount }, "Alert events created");
-            }
+        if (analysis && persisted?.issuerName) {
+          const alertCount = await evaluateAlerts({
+            id: persisted.id,
+            issuerName: persisted.issuerName,
+            title: raw.title,
+            finalUrgencyScore: persisted.finalUrgencyScore,
+            eventType: persisted.eventType,
+            covenantFlag: persisted.covenantFlag ?? false,
+          });
+          if (alertCount > 0) {
+            req.log.info({ articleId: persisted.id, alertCount }, "Alert events created");
           }
         }
 
