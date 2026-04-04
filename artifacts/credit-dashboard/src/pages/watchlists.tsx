@@ -5,6 +5,7 @@ import {
   useRemoveWatchlistItem,
   useGetWatchlistArticles,
   useGetWatchlistItems,
+  useListAlertEvents,
   getListWatchlistsQueryKey,
   getGetWatchlistArticlesQueryKey,
   getGetWatchlistItemsQueryKey,
@@ -43,6 +44,12 @@ export default function Watchlists() {
     selectedId ?? 0,
     { query: { enabled: selectedId !== null } }
   );
+
+  const { data: alertsData } = useListAlertEvents(
+    { watchlistId: selectedId ?? 0, limit: 1 },
+    { query: { enabled: selectedId !== null } }
+  );
+  const alertCount = alertsData?.total ?? 0;
 
   const handleCreate = async () => {
     const name = newName.trim();
@@ -116,6 +123,11 @@ export default function Watchlists() {
                 >
                   <Bookmark className="h-3.5 w-3.5 mr-2 shrink-0" />
                   <span className="truncate">{w.name}</span>
+                  {selectedId === w.id && itemsData && (
+                    <Badge variant="outline" className="ml-auto font-mono text-xs shrink-0" aria-label={`${itemsData.items.length} issuers`}>
+                      {itemsData.items.length}
+                    </Badge>
+                  )}
                 </Button>
               ))
             )}
@@ -142,9 +154,16 @@ export default function Watchlists() {
                   )}
                 </div>
                 {articlesData && (
-                  <Badge variant="outline" className="font-mono text-xs">
-                    {articlesData.articles.length} article{articlesData.articles.length !== 1 ? "s" : ""}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {alertCount > 0 && (
+                      <Badge className="font-mono text-xs" aria-label={`${alertCount} watchlist ${alertCount !== 1 ? "alerts" : "alert"}`}>
+                        {alertCount} alert{alertCount !== 1 ? "s" : ""}
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="font-mono text-xs">
+                      {articlesData.articles.length} article{articlesData.articles.length !== 1 ? "s" : ""}
+                    </Badge>
+                  </div>
                 )}
               </div>
 
