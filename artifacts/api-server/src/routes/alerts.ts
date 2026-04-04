@@ -7,6 +7,8 @@ import {
   MarkAlertReadParams,
   ToggleAlertRuleParams,
   DeleteAlertRuleParams,
+  UpdateAlertRuleParams,
+  UpdateAlertRuleBody,
 } from "@workspace/api-zod";
 import { eq, and, desc, count } from "drizzle-orm";
 
@@ -154,6 +156,54 @@ router.post("/alerts/rules/:id/toggle", async (req, res): Promise<void> => {
   const [updated] = await db
     .update(alertRulesTable)
     .set({ isActive: !existing.isActive, updatedAt: new Date() })
+    .where(eq(alertRulesTable.id, params.data.id))
+    .returning();
+
+  res.json(updated);
+});
+
+// PATCH /alerts/rules/:id
+router.patch("/alerts/rules/:id", async (req, res): Promise<void> => {
+  const params = UpdateAlertRuleParams.safeParse({ id: req.params.id });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = UpdateAlertRuleBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(alertRulesTable)
+    .where(eq(alertRulesTable.id, params.data.id))
+    .limit(1);
+
+  if (!existing) {
+    res.status(404).json({ error: "Alert rule not found" });
+    return;
+  }
+
+  const { name, isActive, minimumUrgency, eventTypes, covenantFlagOnly } = body.data;
+
+  if (name !== undefined && name.trim() === "") {
+    res.status(400).json({ error: "name must not be empty" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(alertRulesTable)
+    .set({
+      ...(name !== undefined && { name: name.trim() }),
+      ...(isActive !== undefined && { isActive }),
+      ...(minimumUrgency !== undefined && { minimumUrgency }),
+      ...(eventTypes !== undefined && { eventTypes: eventTypes ?? null }),
+      ...(covenantFlagOnly !== undefined && { covenantFlagOnly }),
+      updatedAt: new Date(),
+    })
     .where(eq(alertRulesTable.id, params.data.id))
     .returning();
 

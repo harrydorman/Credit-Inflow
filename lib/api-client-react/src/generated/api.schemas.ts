@@ -542,6 +542,23 @@ export interface CreateAlertRuleRequest {
   covenantFlagOnly?: boolean;
 }
 
+export interface UpdateAlertRuleRequest {
+  name?: string;
+  isActive?: boolean;
+  /**
+   * @minimum 1
+   * @maximum 10
+   * @nullable
+   */
+  minimumUrgency?: number | null;
+  /**
+   * @minItems 1
+   * @nullable
+   */
+  eventTypes?: string[] | null;
+  covenantFlagOnly?: boolean;
+}
+
 export type ListArticlesParams = {
   sector?: string;
   eventType?: string;

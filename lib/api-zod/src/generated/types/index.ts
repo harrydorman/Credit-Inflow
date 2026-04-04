@@ -55,6 +55,7 @@ export * from "./trendsDebug";
 export * from "./trendsDebugEventTypeCounts";
 export * from "./trendsDebugNegativeSentimentCounts";
 export * from "./trendsDebugSectorCounts";
+export * from "./updateAlertRuleRequest";
 export * from "./watchlist";
 export * from "./watchlistItem";
 export * from "./watchlistItemList";

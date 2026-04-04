@@ -3,6 +3,7 @@ import {
   useListAlertEvents,
   useListAlertRules,
   useCreateAlertRule,
+  useUpdateAlertRule,
   useMarkAlertRead,
   useToggleAlertRule,
   useDeleteAlertRule,
@@ -215,9 +216,57 @@ function RulesList() {
   const { data: watchlistData } = useListWatchlists();
   const toggleRule = useToggleAlertRule();
   const deleteRule = useDeleteAlertRule();
+  const updateRule = useUpdateAlertRule();
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editMinUrgency, setEditMinUrgency] = useState<string>("");
+  const [editEventTypesRaw, setEditEventTypesRaw] = useState("");
+  const [editCovenantFlagOnly, setEditCovenantFlagOnly] = useState(false);
 
   const watchlistName = (id: number) =>
     watchlistData?.watchlists.find((w) => w.id === id)?.name ?? `#${id}`;
+
+  const startEdit = (rule: NonNullable<typeof data>["rules"][number]) => {
+    setEditingId(rule.id);
+    setEditName(rule.name);
+    setEditMinUrgency(rule.minimumUrgency != null ? String(rule.minimumUrgency) : "");
+    setEditEventTypesRaw(rule.eventTypes ? rule.eventTypes.join(", ") : "");
+    setEditCovenantFlagOnly(rule.covenantFlagOnly);
+  };
+
+  const cancelEdit = () => setEditingId(null);
+
+  const handleSave = async (id: number) => {
+    const rawTypes = editEventTypesRaw.trim();
+    const parsedTypes =
+      rawTypes.length > 0
+        ? rawTypes
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : null;
+
+    const minUrgency = editMinUrgency !== "" ? parseInt(editMinUrgency, 10) : null;
+    if (minUrgency !== null && isNaN(minUrgency)) return;
+
+    try {
+      await updateRule.mutateAsync({
+        id,
+        data: {
+          name: editName.trim() || undefined,
+          minimumUrgency: minUrgency,
+          eventTypes: parsedTypes && parsedTypes.length > 0 ? parsedTypes : null,
+          covenantFlagOnly: editCovenantFlagOnly,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: getListAlertRulesQueryKey() });
+      setEditingId(null);
+      toast({ title: "Alert rule updated" });
+    } catch {
+      toast({ title: "Failed to update rule", variant: "destructive" });
+    }
+  };
 
   const handleToggle = async (id: number) => {
     try {
@@ -258,65 +307,154 @@ function RulesList() {
 
   return (
     <div className="space-y-2">
-      {data.rules.map((rule) => (
-        <div
-          key={rule.id}
-          className="border border-border rounded-md px-4 py-3 bg-card flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono"
-        >
-          <span className="font-bold text-sm truncate max-w-[200px]">
-            {rule.name}
-          </span>
-
-          <span className="text-muted-foreground truncate">
-            {watchlistName(rule.watchlistId)}
-          </span>
-
-          {rule.minimumUrgency != null && (
-            <Badge variant="outline" className="text-xs">
-              urgency ≥ {rule.minimumUrgency}
-            </Badge>
-          )}
-
-          {rule.eventTypes?.map((et) => (
-            <Badge key={et} variant="secondary" className="text-xs">
-              {et}
-            </Badge>
-          ))}
-
-          {rule.covenantFlagOnly && (
-            <Badge variant="outline" className="text-xs border-amber-500 text-amber-500">
-              covenant only
-            </Badge>
-          )}
-
-          <Badge
-            variant={rule.isActive ? "default" : "secondary"}
-            className="ml-auto text-xs"
+      {data.rules.map((rule) =>
+        editingId === rule.id ? (
+          <div
+            key={rule.id}
+            className="border border-primary/40 rounded-md px-4 py-3 bg-card space-y-3 text-xs font-mono"
           >
-            {rule.isActive ? "ACTIVE" : "INACTIVE"}
-          </Badge>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-mono text-muted-foreground">NAME</label>
+                <Input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
 
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs font-mono"
-            onClick={() => handleToggle(rule.id)}
-            disabled={toggleRule.isPending}
-          >
-            {rule.isActive ? "Disable" : "Enable"}
-          </Button>
+              <div className="space-y-1">
+                <label className="text-xs font-mono text-muted-foreground">
+                  MIN URGENCY (1–10)
+                </label>
+                <Select value={editMinUrgency} onValueChange={setEditMinUrgency}>
+                  <SelectTrigger className="h-8 text-xs font-mono">
+                    <SelectValue placeholder="Any" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Any</SelectItem>
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {n}+
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs font-mono text-destructive hover:text-destructive"
-            onClick={() => handleDelete(rule.id)}
-            disabled={deleteRule.isPending}
+              <div className="space-y-1">
+                <label className="text-xs font-mono text-muted-foreground">
+                  EVENT TYPES (comma-separated)
+                </label>
+                <Input
+                  value={editEventTypesRaw}
+                  onChange={(e) => setEditEventTypesRaw(e.target.value)}
+                  placeholder="e.g. downgrade, default"
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-xs font-mono cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editCovenantFlagOnly}
+                  onChange={(e) => setEditCovenantFlagOnly(e.target.checked)}
+                  className="accent-primary"
+                />
+                COVENANT FLAG ONLY
+              </label>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                className="h-7 text-xs font-mono"
+                onClick={() => handleSave(rule.id)}
+                disabled={!editName.trim() || updateRule.isPending}
+              >
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs font-mono"
+                onClick={cancelEdit}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div
+            key={rule.id}
+            className="border border-border rounded-md px-4 py-3 bg-card flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono"
           >
-            Delete
-          </Button>
-        </div>
-      ))}
+            <span className="font-bold text-sm truncate max-w-[200px]">
+              {rule.name}
+            </span>
+
+            <span className="text-muted-foreground truncate">
+              {watchlistName(rule.watchlistId)}
+            </span>
+
+            {rule.minimumUrgency != null && (
+              <Badge variant="outline" className="text-xs">
+                urgency ≥ {rule.minimumUrgency}
+              </Badge>
+            )}
+
+            {rule.eventTypes?.map((et) => (
+              <Badge key={et} variant="secondary" className="text-xs">
+                {et}
+              </Badge>
+            ))}
+
+            {rule.covenantFlagOnly && (
+              <Badge variant="outline" className="text-xs border-amber-500 text-amber-500">
+                covenant only
+              </Badge>
+            )}
+
+            <Badge
+              variant={rule.isActive ? "default" : "secondary"}
+              className="ml-auto text-xs"
+            >
+              {rule.isActive ? "ACTIVE" : "INACTIVE"}
+            </Badge>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs font-mono"
+              onClick={() => startEdit(rule)}
+            >
+              Edit
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs font-mono"
+              onClick={() => handleToggle(rule.id)}
+              disabled={toggleRule.isPending}
+            >
+              {rule.isActive ? "Disable" : "Enable"}
+            </Button>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs font-mono text-destructive hover:text-destructive"
+              onClick={() => handleDelete(rule.id)}
+              disabled={deleteRule.isPending}
+            >
+              Delete
+            </Button>
+          </div>
+        )
+      )}
     </div>
   );
 }

@@ -41,6 +41,7 @@ import type {
   SignalsResponse,
   TrendAlertsResponse,
   TrendsDebug,
+  UpdateAlertRuleRequest,
   Watchlist,
   WatchlistItem,
   WatchlistItemList,
@@ -1839,6 +1840,93 @@ export const useToggleAlertRule = <
   TContext
 > => {
   return useMutation(getToggleAlertRuleMutationOptions(options));
+};
+
+/**
+ * @summary Update an existing alert rule
+ */
+export const getUpdateAlertRuleUrl = (id: number) => {
+  return `/api/alerts/rules/${id}`;
+};
+
+export const updateAlertRule = async (
+  id: number,
+  updateAlertRuleRequest: UpdateAlertRuleRequest,
+  options?: RequestInit,
+): Promise<AlertRule> => {
+  return customFetch<AlertRule>(getUpdateAlertRuleUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateAlertRuleRequest),
+  });
+};
+
+export const getUpdateAlertRuleMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAlertRule>>,
+    TError,
+    { id: number; data: BodyType<UpdateAlertRuleRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAlertRule>>,
+  TError,
+  { id: number; data: BodyType<UpdateAlertRuleRequest> },
+  TContext
+> => {
+  const mutationKey = ["updateAlertRule"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAlertRule>>,
+    { id: number; data: BodyType<UpdateAlertRuleRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateAlertRule(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAlertRuleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAlertRule>>
+>;
+export type UpdateAlertRuleMutationBody = BodyType<UpdateAlertRuleRequest>;
+export type UpdateAlertRuleMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update an existing alert rule
+ */
+export const useUpdateAlertRule = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAlertRule>>,
+    TError,
+    { id: number; data: BodyType<UpdateAlertRuleRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAlertRule>>,
+  TError,
+  { id: number; data: BodyType<UpdateAlertRuleRequest> },
+  TContext
+> => {
+  return useMutation(getUpdateAlertRuleMutationOptions(options));
 };
 
 /**

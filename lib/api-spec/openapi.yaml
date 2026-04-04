@@ -505,6 +505,41 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /alerts/rules/{id}:
+    patch:
+      operationId: updateAlertRule
+      tags: [alerts]
+      summary: Update an existing alert rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAlertRuleRequest"
+      responses:
+        "200":
+          description: Updated alert rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRule"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Alert rule not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       operationId: deleteAlertRule
       tags: [alerts]
@@ -1430,3 +1465,22 @@ components:
       required:
         - watchlistId
         - name
+
+    UpdateAlertRuleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        isActive:
+          type: boolean
+        minimumUrgency:
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 10
+        eventTypes:
+          type: ["array", "null"]
+          items:
+            type: string
+          minItems: 1
+        covenantFlagOnly:
+          type: boolean
