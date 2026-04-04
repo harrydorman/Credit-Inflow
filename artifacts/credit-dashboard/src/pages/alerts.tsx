@@ -153,7 +153,7 @@ function CreateRuleForm() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="">Any</SelectItem>
-              {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
                 <SelectItem key={n} value={String(n)}>
                   {n}+
                 </SelectItem>
