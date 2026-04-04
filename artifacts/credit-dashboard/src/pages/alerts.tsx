@@ -4,6 +4,8 @@ import {
   useListAlertRules,
   useCreateAlertRule,
   useMarkAlertRead,
+  useToggleAlertRule,
+  useDeleteAlertRule,
   useListWatchlists,
   getListAlertEventsQueryKey,
   getListAlertRulesQueryKey,
@@ -206,11 +208,24 @@ function CreateRuleForm() {
 // ─── RulesList ───────────────────────────────────────────────────────────────
 
 function RulesList() {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useListAlertRules();
   const { data: watchlistData } = useListWatchlists();
+  const toggleRule = useToggleAlertRule();
+  const deleteRule = useDeleteAlertRule();
 
   const watchlistName = (id: number) =>
     watchlistData?.watchlists.find((w) => w.id === id)?.name ?? `#${id}`;
+
+  const handleToggle = async (id: number) => {
+    await toggleRule.mutateAsync({ id });
+    queryClient.invalidateQueries({ queryKey: getListAlertRulesQueryKey() });
+  };
+
+  const handleDelete = async (id: number) => {
+    await deleteRule.mutateAsync({ id });
+    queryClient.invalidateQueries({ queryKey: getListAlertRulesQueryKey() });
+  };
 
   if (isLoading) {
     return (
@@ -269,6 +284,26 @@ function RulesList() {
           >
             {rule.isActive ? "ACTIVE" : "INACTIVE"}
           </Badge>
+
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs font-mono"
+            onClick={() => handleToggle(rule.id)}
+            disabled={toggleRule.isPending}
+          >
+            {rule.isActive ? "Disable" : "Enable"}
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs font-mono text-destructive hover:text-destructive"
+            onClick={() => handleDelete(rule.id)}
+            disabled={deleteRule.isPending}
+          >
+            Delete
+          </Button>
         </div>
       ))}
     </div>

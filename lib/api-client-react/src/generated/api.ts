@@ -1758,6 +1758,174 @@ export const useCreateAlertRule = <
 };
 
 /**
+ * @summary Toggle the isActive status of an alert rule
+ */
+export const getToggleAlertRuleUrl = (id: number) => {
+  return `/api/alerts/rules/${id}/toggle`;
+};
+
+export const toggleAlertRule = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AlertRule> => {
+  return customFetch<AlertRule>(getToggleAlertRuleUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getToggleAlertRuleMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleAlertRule>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof toggleAlertRule>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["toggleAlertRule"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof toggleAlertRule>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return toggleAlertRule(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ToggleAlertRuleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof toggleAlertRule>>
+>;
+
+export type ToggleAlertRuleMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Toggle the isActive status of an alert rule
+ */
+export const useToggleAlertRule = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleAlertRule>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof toggleAlertRule>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getToggleAlertRuleMutationOptions(options));
+};
+
+/**
+ * @summary Delete an alert rule
+ */
+export const getDeleteAlertRuleUrl = (id: number) => {
+  return `/api/alerts/rules/${id}`;
+};
+
+export const deleteAlertRule = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteAlertRuleUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteAlertRuleMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAlertRule>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteAlertRule>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteAlertRule"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteAlertRule>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteAlertRule(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteAlertRuleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteAlertRule>>
+>;
+
+export type DeleteAlertRuleMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete an alert rule
+ */
+export const useDeleteAlertRule = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAlertRule>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteAlertRule>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteAlertRuleMutationOptions(options));
+};
+
+/**
  * @summary Mark an alert event as read
  */
 export const getMarkAlertReadUrl = (id: number) => {
