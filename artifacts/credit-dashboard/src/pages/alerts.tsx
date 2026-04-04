@@ -248,6 +248,7 @@ function RulesList() {
         : null;
 
     const minUrgency = editMinUrgency !== "" ? parseInt(editMinUrgency, 10) : null;
+    if (minUrgency !== null && isNaN(minUrgency)) return;
 
     try {
       await updateRule.mutateAsync({

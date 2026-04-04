@@ -189,12 +189,17 @@ router.patch("/alerts/rules/:id", async (req, res): Promise<void> => {
 
   const { name, isActive, minimumUrgency, eventTypes, covenantFlagOnly } = body.data;
 
+  if (name !== undefined && name.trim() === "") {
+    res.status(400).json({ error: "name must not be empty" });
+    return;
+  }
+
   const [updated] = await db
     .update(alertRulesTable)
     .set({
-      ...(name !== undefined && { name }),
+      ...(name !== undefined && { name: name.trim() }),
       ...(isActive !== undefined && { isActive }),
-      ...(minimumUrgency !== undefined && { minimumUrgency: minimumUrgency ?? null }),
+      ...(minimumUrgency !== undefined && { minimumUrgency }),
       ...(eventTypes !== undefined && { eventTypes: eventTypes ?? null }),
       ...(covenantFlagOnly !== undefined && { covenantFlagOnly }),
       updatedAt: new Date(),
