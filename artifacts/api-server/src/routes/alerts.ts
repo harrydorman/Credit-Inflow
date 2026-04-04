@@ -5,6 +5,8 @@ import {
   ListAlertRulesQueryParams,
   CreateAlertRuleBody,
   MarkAlertReadParams,
+  ToggleAlertRuleParams,
+  DeleteAlertRuleParams,
 } from "@workspace/api-zod";
 import { eq, and, desc, count } from "drizzle-orm";
 
@@ -128,6 +130,55 @@ router.post("/alerts/:id/read", async (req, res): Promise<void> => {
   }
 
   res.json(updated);
+});
+
+// POST /alerts/rules/:id/toggle
+router.post("/alerts/rules/:id/toggle", async (req, res): Promise<void> => {
+  const params = ToggleAlertRuleParams.safeParse({ id: req.params.id });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(alertRulesTable)
+    .where(eq(alertRulesTable.id, params.data.id))
+    .limit(1);
+
+  if (!existing) {
+    res.status(404).json({ error: "Alert rule not found" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(alertRulesTable)
+    .set({ isActive: !existing.isActive, updatedAt: new Date() })
+    .where(eq(alertRulesTable.id, params.data.id))
+    .returning();
+
+  res.json(updated);
+});
+
+// DELETE /alerts/rules/:id
+router.delete("/alerts/rules/:id", async (req, res): Promise<void> => {
+  const params = DeleteAlertRuleParams.safeParse({ id: req.params.id });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const deleted = await db
+    .delete(alertRulesTable)
+    .where(eq(alertRulesTable.id, params.data.id))
+    .returning();
+
+  if (deleted.length === 0) {
+    res.status(404).json({ error: "Alert rule not found" });
+    return;
+  }
+
+  res.status(204).send();
 });
 
 export default router;

@@ -807,6 +807,38 @@ export const CreateAlertRuleBody = zod.object({
 });
 
 /**
+ * @summary Toggle the isActive status of an alert rule
+ */
+export const ToggleAlertRuleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const toggleAlertRuleResponseMinimumUrgencyMax = 10;
+
+export const ToggleAlertRuleResponse = zod.object({
+  id: zod.number(),
+  watchlistId: zod.number(),
+  name: zod.string(),
+  isActive: zod.boolean(),
+  minimumUrgency: zod
+    .number()
+    .min(1)
+    .max(toggleAlertRuleResponseMinimumUrgencyMax)
+    .nullish(),
+  eventTypes: zod.array(zod.string()).min(1).nullish(),
+  covenantFlagOnly: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete an alert rule
+ */
+export const DeleteAlertRuleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary Mark an alert event as read
  */
 export const MarkAlertReadParams = zod.object({

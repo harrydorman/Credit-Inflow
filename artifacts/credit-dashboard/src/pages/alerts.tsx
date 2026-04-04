@@ -4,6 +4,8 @@ import {
   useListAlertRules,
   useCreateAlertRule,
   useMarkAlertRead,
+  useToggleAlertRule,
+  useDeleteAlertRule,
   useListWatchlists,
   getListAlertEventsQueryKey,
   getListAlertRulesQueryKey,
@@ -153,7 +155,7 @@ function CreateRuleForm() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="">Any</SelectItem>
-              {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
                 <SelectItem key={n} value={String(n)}>
                   {n}+
                 </SelectItem>
@@ -206,11 +208,34 @@ function CreateRuleForm() {
 // ─── RulesList ───────────────────────────────────────────────────────────────
 
 function RulesList() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data, isLoading } = useListAlertRules();
   const { data: watchlistData } = useListWatchlists();
+  const toggleRule = useToggleAlertRule();
+  const deleteRule = useDeleteAlertRule();
 
   const watchlistName = (id: number) =>
     watchlistData?.watchlists.find((w) => w.id === id)?.name ?? `#${id}`;
+
+  const handleToggle = async (id: number) => {
+    try {
+      await toggleRule.mutateAsync({ id });
+      queryClient.invalidateQueries({ queryKey: getListAlertRulesQueryKey() });
+    } catch {
+      toast({ title: "Failed to update rule", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm("Delete this alert rule? This cannot be undone.")) return;
+    try {
+      await deleteRule.mutateAsync({ id });
+      queryClient.invalidateQueries({ queryKey: getListAlertRulesQueryKey() });
+    } catch {
+      toast({ title: "Failed to delete rule", variant: "destructive" });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -269,6 +294,26 @@ function RulesList() {
           >
             {rule.isActive ? "ACTIVE" : "INACTIVE"}
           </Badge>
+
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs font-mono"
+            onClick={() => handleToggle(rule.id)}
+            disabled={toggleRule.isPending}
+          >
+            {rule.isActive ? "Disable" : "Enable"}
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs font-mono text-destructive hover:text-destructive"
+            onClick={() => handleDelete(rule.id)}
+            disabled={deleteRule.isPending}
+          >
+            Delete
+          </Button>
         </div>
       ))}
     </div>
@@ -280,9 +325,15 @@ function RulesList() {
 function AlertEventsList() {
   const queryClient = useQueryClient();
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [watchlistFilter, setWatchlistFilter] = useState<string>("");
   const markRead = useMarkAlertRead();
+  const { data: watchlistData } = useListWatchlists();
 
-  const params = showUnreadOnly ? { isRead: false, limit: 100 } : { limit: 100 };
+  const params: Parameters<typeof useListAlertEvents>[0] = {
+    limit: 100,
+    ...(showUnreadOnly ? { isRead: false } : {}),
+    ...(watchlistFilter !== "" ? { watchlistId: Number(watchlistFilter) } : {}),
+  };
   const { data, isLoading } = useListAlertEvents(params);
 
   const handleMarkRead = async (id: number) => {
@@ -290,10 +341,17 @@ function AlertEventsList() {
     queryClient.invalidateQueries({ queryKey: getListAlertEventsQueryKey() });
   };
 
+  const emptyMessage = () => {
+    if (watchlistFilter !== "" && showUnreadOnly) return "No unread alerts for this watchlist.";
+    if (watchlistFilter !== "") return "No alerts for this watchlist.";
+    if (showUnreadOnly) return "No unread alerts.";
+    return "No alerts yet.";
+  };
+
   return (
     <div className="space-y-3">
-      {/* Filter toggle */}
-      <div className="flex items-center gap-2">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           size="sm"
           variant={showUnreadOnly ? "default" : "outline"}
@@ -302,6 +360,21 @@ function AlertEventsList() {
         >
           {showUnreadOnly ? "UNREAD ONLY" : "ALL"}
         </Button>
+
+        <Select value={watchlistFilter} onValueChange={setWatchlistFilter}>
+          <SelectTrigger className="h-7 text-xs font-mono w-44">
+            <SelectValue placeholder="All watchlists" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All watchlists</SelectItem>
+            {watchlistData?.watchlists.map((w) => (
+              <SelectItem key={w.id} value={String(w.id)}>
+                {w.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         {data && (
           <span className="text-xs text-muted-foreground font-mono">
             {data.total} alert{data.total !== 1 ? "s" : ""}
@@ -318,9 +391,7 @@ function AlertEventsList() {
       ) : !data?.alerts.length ? (
         <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground gap-2">
           <Bell className="h-8 w-8 opacity-20" />
-          <p className="font-mono text-sm">
-            {showUnreadOnly ? "No unread alerts." : "No alerts yet."}
-          </p>
+          <p className="font-mono text-sm">{emptyMessage()}</p>
         </div>
       ) : (
         <div className="space-y-2">
