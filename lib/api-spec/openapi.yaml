@@ -21,6 +21,8 @@ tags:
     description: Data ingestion operations
   - name: watchlists
     description: Watchlist management operations
+  - name: alerts
+    description: In-app alert rules and alert events
 paths:
   /healthz:
     get:
@@ -387,6 +389,116 @@ paths:
                 $ref: "#/components/schemas/ArticleList"
         "404":
           description: Watchlist not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+
+  /alerts:
+    get:
+      operationId: listAlertEvents
+      tags: [alerts]
+      summary: List triggered alert events, newest first
+      parameters:
+        - name: watchlistId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: isRead
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of alert events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertEventList"
+
+  /alerts/rules:
+    get:
+      operationId: listAlertRules
+      tags: [alerts]
+      summary: List all alert rules
+      parameters:
+        - name: watchlistId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of alert rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRuleList"
+    post:
+      operationId: createAlertRule
+      tags: [alerts]
+      summary: Create a new alert rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAlertRuleRequest"
+      responses:
+        "201":
+          description: Alert rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRule"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Watchlist not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /alerts/{id}/read:
+    post:
+      operationId: markAlertRead
+      tags: [alerts]
+      summary: Mark an alert event as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Alert event marked as read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertEvent"
+        "404":
+          description: Alert event not found
           content:
             application/json:
               schema:
@@ -1149,3 +1261,126 @@ components:
           type: string
       required:
         - issuerName
+
+    AlertRule:
+      type: object
+      properties:
+        id:
+          type: integer
+        watchlistId:
+          type: integer
+        name:
+          type: string
+        isActive:
+          type: boolean
+        minimumUrgency:
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 10
+        eventTypes:
+          type: ["array", "null"]
+          items:
+            type: string
+          minItems: 1
+        covenantFlagOnly:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - watchlistId
+        - name
+        - isActive
+        - covenantFlagOnly
+        - createdAt
+        - updatedAt
+
+    AlertRuleList:
+      type: object
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertRule"
+        total:
+          type: integer
+      required:
+        - rules
+        - total
+
+    AlertEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        alertRuleId:
+          type: integer
+        watchlistId:
+          type: integer
+        articleId:
+          type: integer
+        issuerName:
+          type: string
+        title:
+          type: string
+        urgency:
+          type: ["integer", "null"]
+        eventType:
+          type: ["string", "null"]
+        triggeredAt:
+          type: string
+          format: date-time
+        isRead:
+          type: boolean
+      required:
+        - id
+        - alertRuleId
+        - watchlistId
+        - articleId
+        - issuerName
+        - title
+        - triggeredAt
+        - isRead
+
+    AlertEventList:
+      type: object
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertEvent"
+        total:
+          type: integer
+      required:
+        - alerts
+        - total
+
+    CreateAlertRuleRequest:
+      type: object
+      properties:
+        watchlistId:
+          type: integer
+        name:
+          type: string
+        isActive:
+          type: boolean
+          default: true
+        minimumUrgency:
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 10
+        eventTypes:
+          type: ["array", "null"]
+          items:
+            type: string
+          minItems: 1
+        covenantFlagOnly:
+          type: boolean
+          default: false
+      required:
+        - watchlistId
+        - name
