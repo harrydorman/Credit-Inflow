@@ -19,6 +19,8 @@ tags:
     description: Trend detection and cluster analysis
   - name: ingestion
     description: Data ingestion operations
+  - name: watchlists
+    description: Watchlist management operations
 paths:
   /healthz:
     get:
@@ -242,6 +244,130 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RefreshResult"
+
+  /watchlists:
+    get:
+      operationId: listWatchlists
+      tags: [watchlists]
+      summary: List all watchlists
+      responses:
+        "200":
+          description: List of watchlists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchlistList"
+    post:
+      operationId: createWatchlist
+      tags: [watchlists]
+      summary: Create a new watchlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWatchlistRequest"
+      responses:
+        "201":
+          description: Watchlist created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Watchlist"
+
+  /watchlists/{id}/items:
+    post:
+      operationId: addWatchlistItem
+      tags: [watchlists]
+      summary: Add an issuer to a watchlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddWatchlistItemRequest"
+      responses:
+        "201":
+          description: Item added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchlistItem"
+        "404":
+          description: Watchlist not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Issuer already in watchlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /watchlists/{id}/items/{issuerName}:
+    delete:
+      operationId: removeWatchlistItem
+      tags: [watchlists]
+      summary: Remove an issuer from a watchlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: issuerName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Item removed
+        "404":
+          description: Watchlist or item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /watchlists/{id}/articles:
+    get:
+      operationId: getWatchlistArticles
+      tags: [watchlists]
+      summary: Get recent articles for issuers in a watchlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Articles for watchlist issuers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleList"
+        "404":
+          description: Watchlist not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   schemas:
@@ -914,3 +1040,76 @@ components:
         - duplicatesSkipped
         - errors
         - message
+
+    Watchlist:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - createdAt
+        - updatedAt
+
+    WatchlistList:
+      type: object
+      properties:
+        watchlists:
+          type: array
+          items:
+            $ref: "#/components/schemas/Watchlist"
+        total:
+          type: integer
+      required:
+        - watchlists
+        - total
+
+    WatchlistItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        watchlistId:
+          type: integer
+        issuerName:
+          type: string
+        normalizedIssuerName:
+          type: string
+        addedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - watchlistId
+        - issuerName
+        - normalizedIssuerName
+        - addedAt
+
+    CreateWatchlistRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+      required:
+        - name
+
+    AddWatchlistItemRequest:
+      type: object
+      properties:
+        issuerName:
+          type: string
+      required:
+        - issuerName

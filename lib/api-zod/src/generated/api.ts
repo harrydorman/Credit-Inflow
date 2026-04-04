@@ -548,3 +548,156 @@ export const TriggerRefreshResponse = zod.object({
   errors: zod.number(),
   message: zod.string(),
 });
+
+/**
+ * @summary List all watchlists
+ */
+export const ListWatchlistsResponse = zod.object({
+  watchlists: zod.array(
+    zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      description: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  total: zod.number(),
+});
+
+/**
+ * @summary Create a new watchlist
+ */
+export const CreateWatchlistBody = zod.object({
+  name: zod.string(),
+  description: zod.string().nullish(),
+});
+
+/**
+ * @summary Add an issuer to a watchlist
+ */
+export const AddWatchlistItemParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AddWatchlistItemBody = zod.object({
+  issuerName: zod.string(),
+});
+
+/**
+ * @summary Remove an issuer from a watchlist
+ */
+export const RemoveWatchlistItemParams = zod.object({
+  id: zod.coerce.number(),
+  issuerName: zod.coerce.string(),
+});
+
+/**
+ * @summary Get recent articles for issuers in a watchlist
+ */
+export const GetWatchlistArticlesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const getWatchlistArticlesQueryLimitDefault = 50;
+
+export const GetWatchlistArticlesQueryParams = zod.object({
+  limit: zod.coerce.number().default(getWatchlistArticlesQueryLimitDefault),
+});
+
+export const GetWatchlistArticlesResponse = zod.object({
+  articles: zod.array(
+    zod.object({
+      id: zod.number(),
+      title: zod.string(),
+      source: zod.string(),
+      publishedAt: zod.coerce.date(),
+      url: zod.string(),
+      rawContent: zod.string().nullish(),
+      summary: zod.string().nullish(),
+      sector: zod.string().nullish(),
+      eventType: zod.string().nullish(),
+      sentiment: zod.string().nullish(),
+      whyItMatters: zod.string().nullish(),
+      whoCares: zod.string().nullish(),
+      cloImpact: zod.boolean(),
+      issuerName: zod.string().nullish(),
+      urgencyScore: zod.number().nullish(),
+      covenantFlag: zod.boolean(),
+      ratingMentioned: zod.string().nullish(),
+      ratingAgency: zod.string().nullish(),
+      marketImpact: zod.string().nullish(),
+      finalUrgencyScore: zod.number().nullish(),
+      creditSignalScore: zod.number().nullish(),
+      tradeDirection: zod.string().nullish(),
+      tradeRationale: zod.string().nullish(),
+      potentialTrades: zod.array(zod.string()).nullish(),
+      marketsImpacted: zod.array(zod.string()).nullish(),
+      leverageMentioned: zod.boolean(),
+      liquidityConcern: zod.boolean(),
+      refinancingRisk: zod.boolean(),
+      earningsMiss: zod.boolean(),
+      ratingIsDowngrade: zod.boolean(),
+      ratingIsUpgrade: zod.boolean(),
+      ratingIsCCCThreshold: zod.boolean(),
+      covenantType: zod.string().nullish(),
+      cloRelevance: zod.string().nullish(),
+      cloLoanVsBond: zod.string().nullish(),
+      cloWarfImpact: zod.string().nullish(),
+      cloCCCBucketRisk: zod.boolean(),
+      cloExplanation: zod.string().nullish(),
+      cloImpactTypes: zod.array(zod.string()).nullish(),
+      spreadWideningRisk: zod.boolean(),
+      forcedSellingRisk: zod.boolean(),
+      distressedRisk: zod.boolean(),
+      stockMove1D: zod
+        .number()
+        .nullish()
+        .describe("Issuer stock 1-day return %"),
+      stockMove5D: zod
+        .number()
+        .nullish()
+        .describe("Issuer stock 5-day return %"),
+      hyETFMove: zod.number().nullish().describe("HYG ETF 1-day move %"),
+      marketValidationSignal: zod
+        .union([
+          zod.literal("confirmed"),
+          zod.literal("mixed"),
+          zod.literal("unconfirmed"),
+          zod.literal(null),
+        ])
+        .nullish()
+        .describe(
+          "confirmed: news + market aligned; mixed: divergence; unconfirmed: no market data",
+        ),
+      confidenceScore: zod
+        .union([
+          zod.literal("high"),
+          zod.literal("medium"),
+          zod.literal("low"),
+          zod.literal(null),
+        ])
+        .nullish()
+        .describe("Combined AI signal strength + market confirmation"),
+      creditSummaryJson: zod
+        .object({
+          situation: zod.string().optional(),
+          creditDrivers: zod.array(zod.string()).optional(),
+          riskFactors: zod.array(zod.string()).optional(),
+          keyMetricsMentioned: zod.array(zod.string()).optional(),
+          bottomLine: zod.string().optional(),
+        })
+        .nullish(),
+      scoreExplanationJson: zod
+        .object({
+          creditRisk: zod.string().optional(),
+          marketSignal: zod.string().optional(),
+          cloImpact: zod.string().optional(),
+        })
+        .nullish(),
+      processedAt: zod.coerce.date().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  total: zod.number(),
+});

@@ -6,18 +6,21 @@
  * OpenAPI spec version: 0.3.0
  */
 
+export * from "./addWatchlistItemRequest";
 export * from "./article";
 export * from "./articleConfidenceScore";
 export * from "./articleCreditSummaryJson";
 export * from "./articleList";
 export * from "./articleMarketValidationSignal";
 export * from "./articleScoreExplanationJson";
+export * from "./createWatchlistRequest";
 export * from "./dailyBrief";
 export * from "./dailyBriefItem";
 export * from "./errorResponse";
 export * from "./eventTypeSignal";
 export * from "./fallbackNarrative";
 export * from "./getTrendsParams";
+export * from "./getWatchlistArticlesParams";
 export * from "./healthStatus";
 export * from "./issuerList";
 export * from "./issuerSignal";
@@ -45,3 +48,6 @@ export * from "./trendsDebug";
 export * from "./trendsDebugEventTypeCounts";
 export * from "./trendsDebugNegativeSentimentCounts";
 export * from "./trendsDebugSectorCounts";
+export * from "./watchlist";
+export * from "./watchlistItem";
+export * from "./watchlistList";

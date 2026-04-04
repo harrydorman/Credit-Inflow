@@ -8,6 +8,7 @@ import trendsRouter from "./trends";
 import issuerThesisRouter from "./issuerThesis";
 import marketOverviewRouter from "./marketOverview";
 import debugRouter from "./debug";
+import watchlistsRouter from "./watchlists";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(trendsRouter);
 router.use(issuerThesisRouter);
 router.use(marketOverviewRouter);
 router.use(debugRouter);
+router.use(watchlistsRouter);
 
 export default router;
