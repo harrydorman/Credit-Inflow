@@ -94,6 +94,10 @@ export const articlesTable = pgTable("articles", {
   contentDepthScore: integer("content_depth_score"),       // 0-100: richer content = higher score
   contentSourceType: text("content_source_type"),          // "rss_snippet" | "expanded_article" | "api_fulltext"
 
+  // Deduplication fingerprint — SHA-256 of normalized(title + "|" + content[:300])
+  // Catches near-duplicate articles published under different URLs.
+  contentFingerprint: text("content_fingerprint"),
+
   // Processing outcome tracking
   // Values: "noise_filtered" | "empty_content" | "ai_null" | "ai_error" | "duplicate" | null (= processed OK)
   processFailureReason: text("process_failure_reason"),

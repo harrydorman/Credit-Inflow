@@ -136,6 +136,9 @@ importers:
       thread-stream:
         specifier: 3.1.0
         version: 3.1.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
 
   artifacts/credit-dashboard:
     devDependencies:
@@ -521,7 +524,7 @@ importers:
   lib/api-spec:
     devDependencies:
       orval:
-        specifier: ^8.5.2
+        specifier: ^8.5.3
         version: 8.5.3(prettier@3.8.1)(typescript@5.9.3)
 
   lib/api-zod:
