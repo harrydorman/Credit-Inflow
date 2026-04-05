@@ -105,7 +105,7 @@ Provides two public functions:
 If `enqueueArticlePipelineJob` throws:
 
 1. The error is logged with `{ err, articleId, jobId }`.
-2. `articlesPipelineQueueFailed` and `articlesPipelineQueueFailed` are incremented.
+2. `articlesPipelineQueueFailed` and `articlesProcessingFailed` are incremented.
 3. The article **remains in `raw/pending` state** — it is not marked failed.
 4. Ingestion continues processing remaining articles.
 

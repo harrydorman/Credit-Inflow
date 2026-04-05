@@ -361,7 +361,9 @@ export async function scheduleRetry(
  * process will pick up and execute asynchronously.
  *
  * Returns the new `jobId` string, or `null` if a job is already active
- * (queued / running / retrying) for this (type, scopeKey) slot.
+ * (any non-terminal status: queued, running, or retrying) for this
+ * (type, scopeKey) slot.  The active-job check uses the same `findActiveJob`
+ * helper as `withJob`.
  */
 export async function enqueueJob(
   type: JobType,
