@@ -8,7 +8,7 @@
  * - getPortfoliosForOrganization: org scoping
  * - getPortfolioExposureAlerts: grouping and sorting
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoisted DB mock
@@ -131,6 +131,45 @@ const PORTFOLIO = {
   id: 42, organizationId: ORG_A, name: "Test Portfolio",
   description: null, createdAt: new Date("2024-01-01T00:00:00Z"),
   updatedAt: new Date("2024-01-01T00:00:00Z"),
+};
+
+// ---------------------------------------------------------------------------
+// Route-level test helpers (supertest + minimal Express app)
+// ---------------------------------------------------------------------------
+
+import supertest from "supertest";
+import express, { type Request, type Response, type NextFunction } from "express";
+import alertsRouter from "../routes/alerts";
+import portfoliosRouter from "../routes/portfolios";
+import * as alertEvalSvc from "../services/alertEvaluationService";
+import * as portfolioSvc from "../services/portfolioService";
+
+/**
+ * Minimal Express app for route-level tests.
+ * Auth: injects orgId from X-Organization-Id header (mirrors mockAuthResolver).
+ * Created once; service functions are spied on per-test.
+ */
+const testApp = (() => {
+  const app = express();
+  app.use(express.json());
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    req.orgId = (req.headers["x-organization-id"] as string) ?? null;
+    req.userId = (req.headers["x-user-id"] as string) ?? null;
+    next();
+  });
+  app.use("/api", alertsRouter);
+  app.use("/api", portfoliosRouter);
+  return app;
+})();
+
+const PORTFOLIO_DETAILS_RESULT = {
+  ...PORTFOLIO,
+  holdingsCount: 0,
+  mappedIssuerCount: 0,
+  unmappedIssuerCount: 0,
+  alertCount: 0,
+  highSeverityAlertCount: 0,
+  holdings: [],
 };
 
 // ---------------------------------------------------------------------------
@@ -376,5 +415,250 @@ describe("getPortfolioExposureAlerts", () => {
     const result = await getPortfolioExposureAlerts(PORTFOLIO.id);
     expect(result[0].issuerName).toBe("Ford");
     expect(result[1].issuerName).toBe("Nike");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HTTP route tests — GET /api/alerts
+// ---------------------------------------------------------------------------
+
+describe("GET /api/alerts — route layer", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns 401 when no org context is provided", async () => {
+    const res = await supertest(testApp).get("/api/alerts");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 200 with alert page for the requesting org", async () => {
+    vi.spyOn(alertEvalSvc, "getAlertsForOrganization").mockResolvedValue({
+      alerts: [{ ...ALERT_EVENT, portfolioLinked: true }] as never,
+      total: 1,
+    });
+    const res = await supertest(testApp)
+      .get("/api/alerts")
+      .set("X-Organization-Id", ORG_A);
+    expect(res.status).toBe(200);
+    expect(res.body.alerts).toHaveLength(1);
+    expect(res.body.total).toBe(1);
+  });
+
+  it("passes org id and filters to getAlertsForOrganization", async () => {
+    const spy = vi.spyOn(alertEvalSvc, "getAlertsForOrganization").mockResolvedValue({ alerts: [], total: 0 });
+    await supertest(testApp)
+      .get("/api/alerts?severity=high")
+      .set("X-Organization-Id", ORG_A);
+    expect(spy).toHaveBeenCalledWith(ORG_A, expect.objectContaining({ severity: "high" }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HTTP route tests — POST /api/alerts/bulk-read
+// ---------------------------------------------------------------------------
+
+describe("POST /api/alerts/bulk-read — route layer", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns 401 when no org context is provided", async () => {
+    const res = await supertest(testApp)
+      .post("/api/alerts/bulk-read")
+      .send({ ids: [1] });
+    expect(res.status).toBe(401);
+  });
+
+  it("only updates alerts belonging to the current org", async () => {
+    resetDb();
+    // select chain: .select().from().innerJoin().where() → [{ id: 1 }]  (terminal at where)
+    dbMock.where.mockResolvedValueOnce([{ id: 1 }]);
+    // update chain: .update().set().where().returning() — where chainable, returning terminal
+    dbMock.returning.mockResolvedValueOnce([{ id: 1 }]);
+
+    const res = await supertest(testApp)
+      .post("/api/alerts/bulk-read")
+      .set("X-Organization-Id", ORG_A)
+      .send({ ids: [1] });
+    expect(res.status).toBe(200);
+    expect(res.body.updated).toBe(1);
+  });
+
+  it("returns updated:0 when none of the requested ids belong to the current org", async () => {
+    resetDb();
+    // select chain: .where() → [] (no valid alerts for this org)
+    dbMock.where.mockResolvedValueOnce([]);
+
+    const res = await supertest(testApp)
+      .post("/api/alerts/bulk-read")
+      .set("X-Organization-Id", ORG_B)
+      .send({ ids: [999] });
+    expect(res.status).toBe(200);
+    expect(res.body.updated).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HTTP route tests — POST /api/alerts/:id/unread
+// ---------------------------------------------------------------------------
+
+describe("POST /api/alerts/:id/unread — route layer", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns 401 when no org context is provided", async () => {
+    const res = await supertest(testApp).post("/api/alerts/1/unread");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 404 when the alert does not belong to the requesting org", async () => {
+    resetDb();
+    // select chain: .select().from().innerJoin().where().limit() → [] (not found for this org)
+    dbMock.limit.mockResolvedValueOnce([]);
+
+    const res = await supertest(testApp)
+      .post("/api/alerts/1/unread")
+      .set("X-Organization-Id", ORG_B);
+    expect(res.status).toBe(404);
+  });
+
+  it("marks alert as unread only when the org owns it", async () => {
+    resetDb();
+    // select chain: .select().from().innerJoin().where().limit() → [{ id: 1 }]
+    dbMock.limit.mockResolvedValueOnce([{ id: 1 }]);
+    // update chain: .update().set().where().returning() → [updatedAlert]
+    dbMock.returning.mockResolvedValueOnce([{ ...ALERT_EVENT, isRead: false }]);
+
+    const res = await supertest(testApp)
+      .post("/api/alerts/1/unread")
+      .set("X-Organization-Id", ORG_A);
+    expect(res.status).toBe(200);
+    expect(res.body.isRead).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HTTP route tests — POST /api/alerts/:id/feedback
+// ---------------------------------------------------------------------------
+
+describe("POST /api/alerts/:id/feedback — route layer", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns 401 when no org context is provided", async () => {
+    const res = await supertest(testApp)
+      .post("/api/alerts/1/feedback")
+      .send({ rating: "helpful" });
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 404 when alert does not belong to the requesting org", async () => {
+    resetDb();
+    // select chain: .where().limit() → [] (alert not owned by this org)
+    dbMock.limit.mockResolvedValueOnce([]);
+
+    const res = await supertest(testApp)
+      .post("/api/alerts/1/feedback")
+      .set("X-Organization-Id", ORG_B)
+      .send({ organizationId: ORG_B, rating: "useful" });
+    expect(res.status).toBe(404);
+  });
+
+  it("upserts feedback when the org owns the alert", async () => {
+    resetDb();
+    // select chain: .where().limit() → [{ id: 1 }]
+    dbMock.limit.mockResolvedValueOnce([{ id: 1 }]);
+    // insert chain: .insert().values().onConflictDoUpdate().returning() → [feedback]
+    const FEEDBACK = {
+      id: 99, alertEventId: 1, organizationId: ORG_A, userId: null,
+      rating: "useful", note: null, createdAt: new Date(), updatedAt: new Date(),
+    };
+    dbMock.returning.mockResolvedValueOnce([FEEDBACK]);
+
+    const res = await supertest(testApp)
+      .post("/api/alerts/1/feedback")
+      .set("X-Organization-Id", ORG_A)
+      .send({ organizationId: ORG_A, rating: "useful" });
+    expect(res.status).toBe(200);
+    expect(res.body.rating).toBe("useful");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HTTP route tests — GET /api/portfolios
+// ---------------------------------------------------------------------------
+
+describe("GET /api/portfolios — route layer", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns 401 when no org context is provided", async () => {
+    const res = await supertest(testApp).get("/api/portfolios");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns portfolios list for the requesting org", async () => {
+    vi.spyOn(portfolioSvc, "getPortfoliosForOrganization").mockResolvedValue([PORTFOLIO] as never);
+    const res = await supertest(testApp)
+      .get("/api/portfolios")
+      .set("X-Organization-Id", ORG_A);
+    expect(res.status).toBe(200);
+    expect(res.body.portfolios).toHaveLength(1);
+    expect(res.body.portfolios[0].organizationId).toBe(ORG_A);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HTTP route tests — GET /api/portfolios/:id
+// ---------------------------------------------------------------------------
+
+describe("GET /api/portfolios/:id — route layer", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns 401 when no org context is provided", async () => {
+    const res = await supertest(testApp).get("/api/portfolios/42");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 404 when portfolio belongs to a different org (cross-org blocked)", async () => {
+    vi.spyOn(portfolioSvc, "getPortfolioDetails").mockResolvedValue(null);
+    const res = await supertest(testApp)
+      .get("/api/portfolios/42")
+      .set("X-Organization-Id", ORG_B);
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 200 with details for a portfolio owned by the requesting org", async () => {
+    vi.spyOn(portfolioSvc, "getPortfolioDetails").mockResolvedValue(PORTFOLIO_DETAILS_RESULT as never);
+    const res = await supertest(testApp)
+      .get("/api/portfolios/42")
+      .set("X-Organization-Id", ORG_A);
+    expect(res.status).toBe(200);
+    expect(res.body.organizationId).toBe(ORG_A);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HTTP route tests — GET /api/portfolios/:id/exposure-alerts
+// ---------------------------------------------------------------------------
+
+describe("GET /api/portfolios/:id/exposure-alerts — route layer", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns 401 when no org context is provided", async () => {
+    const res = await supertest(testApp).get("/api/portfolios/42/exposure-alerts");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 404 when portfolio does not belong to the requesting org", async () => {
+    vi.spyOn(portfolioSvc, "getPortfolioDetails").mockResolvedValue(null);
+    const res = await supertest(testApp)
+      .get("/api/portfolios/42/exposure-alerts")
+      .set("X-Organization-Id", ORG_B);
+    expect(res.status).toBe(404);
+  });
+
+  it("returns exposure alerts for portfolio owned by requesting org", async () => {
+    vi.spyOn(portfolioSvc, "getPortfolioDetails").mockResolvedValue(PORTFOLIO_DETAILS_RESULT as never);
+    vi.spyOn(alertEvalSvc, "getPortfolioExposureAlerts").mockResolvedValue([]);
+    const res = await supertest(testApp)
+      .get("/api/portfolios/42/exposure-alerts")
+      .set("X-Organization-Id", ORG_A);
+    expect(res.status).toBe(200);
+    expect(res.body.alerts).toEqual([]);
   });
 });
