@@ -9,6 +9,11 @@
  *  - Article-level processingStatus / processingError / lastProcessedAt
  *  - jobId surfaced in stats so callers can correlate logs
  *  - Uses updated withJob / NonRetryableError from jobService
+ *
+ * Phase 4 (unified pipeline):
+ *  - Eligible articles are inserted as raw/pending records only
+ *  - processArticlePipeline is the sole AI-processing path for eligible articles
+ *  - Filtered article behaviour (empty_content, noise_filtered) is preserved unchanged
  */
 import { and, isNull, isNotNull, eq } from "drizzle-orm";
 import { db, articlesTable } from "@workspace/db";
@@ -16,10 +21,9 @@ import type { Logger } from "pino";
 
 import { fetchAllArticles } from "../lib/dataProviders";
 import { analyzeArticle, passesNoiseFilter, isCreditTitleOverride } from "../lib/aiProcessing";
-import { getETFSnapshot, validateWithMarketData } from "../lib/marketData";
 import { enrichContent } from "../lib/contentEnricher";
 import { canonicalizeIssuer } from "../lib/canonicalIssuers";
-import { evaluateAlerts } from "../lib/alertEvaluation";
+import { sanitizeNullStr as sanitizeNullStrUtil } from "../lib/stringUtils";
 import { logger as rootLogger } from "../lib/logger";
 import {
   fingerprintTitle,
@@ -28,23 +32,18 @@ import {
   existingUrlSet,
 } from "./deduplication";
 import { withJob } from "./jobService";
+import { processArticlePipeline } from "./pipeline";
 
 // ---------------------------------------------------------------------------
 // Shared sanitise helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Re-exported from lib/stringUtils for backward compatibility.
+ * New code should import directly from "../lib/stringUtils".
+ */
 export function sanitizeNullStr(val: string | null | undefined): string | null {
-  if (val === null || val === undefined) return null;
-  const trimmed = val.trim();
-  if (
-    trimmed === "" ||
-    trimmed === "null" ||
-    trimmed === "undefined" ||
-    trimmed === "N/A" ||
-    trimmed === "n/a"
-  )
-    return null;
-  return trimmed;
+  return sanitizeNullStrUtil(val);
 }
 
 export function sanitizeIssuer(val: string | null | undefined): string | null {
@@ -76,18 +75,33 @@ export interface IngestionMetrics {
   feedsFailed: number;
   /** Total raw articles returned from all providers. */
   articlesFetched: number;
-  /** Articles actually written to the DB. */
+  /** Articles actually written to the DB (filtered + raw combined). */
   articlesInserted: number;
   /** Articles skipped because URL or fingerprint already existed. */
   articlesSkippedDuplicate: number;
-  /** Articles skipped due to noise / empty-content filter. */
+  /**
+   * Articles inserted as filtered records (empty content or noise-filtered).
+   * Kept for backward compatibility — equals articlesFiltered.
+   */
   articlesSkippedFiltered: number;
-  /** Articles where AI processing or DB write failed. */
+  /** Articles where the pipeline failed to start (insert succeeded but pipeline threw). */
   articlesProcessingFailed: number;
-  /** Articles with successful AI analysis + market validation. */
+  /**
+   * Articles for which the pipeline was successfully triggered.
+   * Kept for backward compatibility — equals articlesPipelineTriggered.
+   */
   articlesFullyProcessed: number;
   /** Wall-clock duration in ms. */
   totalDurationMs: number;
+  // ── Phase 4 (unified pipeline) ────────────────────────────────────────────
+  /** Eligible articles inserted as raw/pending and handed off to the pipeline. */
+  articlesInsertedRaw: number;
+  /** Articles inserted as filtered (empty_content or noise_filtered). */
+  articlesFiltered: number;
+  /** Articles for which processArticlePipeline was invoked without error. */
+  articlesPipelineTriggered: number;
+  /** Articles where processArticlePipeline threw before completing. */
+  articlesPipelineFailedToStart: number;
 }
 
 export interface IngestionStats extends IngestionMetrics {
@@ -150,16 +164,11 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
       articlesProcessingFailed: 0,
       articlesFullyProcessed: 0,
       totalDurationMs: 0,
+      articlesInsertedRaw: 0,
+      articlesFiltered: 0,
+      articlesPipelineTriggered: 0,
+      articlesPipelineFailedToStart: 0,
     };
-
-    const etfSnapshot = await getETFSnapshot();
-    jobLog.info(
-      {
-        hygMove: etfSnapshot.hyg?.move1D?.toFixed(3) ?? "n/a",
-        lqdMove: etfSnapshot.lqd?.move1D?.toFixed(3) ?? "n/a",
-      },
-      "ETF snapshot ready"
-    );
 
     let allRaw: Awaited<ReturnType<typeof fetchAllArticles>> = [];
     try {
@@ -240,6 +249,7 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
 
         if (!hasContent) {
           metrics.articlesSkippedFiltered++;
+          metrics.articlesFiltered++;
           jobLog.info(
             { title: raw.title.slice(0, 70), source: raw.source },
             "Empty content: skipping AI processing"
@@ -269,7 +279,6 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
         const noisePass = passesNoiseFilter(raw.title, enriched.rawContent);
         const titleOverride = !noisePass && isCreditTitleOverride(raw.title);
         if (!noisePass && !titleOverride) {
-          metrics.articlesSkippedFiltered++;
           jobLog.info(
             { title: raw.title.slice(0, 70), source: raw.source },
             "Noise-filtered: skipping AI processing (score < threshold)"
@@ -293,6 +302,8 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
             lastProcessedAt: now,
           });
           metrics.articlesInserted++;
+          metrics.articlesSkippedFiltered++;
+          metrics.articlesFiltered++;
           continue;
         }
         if (titleOverride) {
@@ -302,26 +313,7 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
           );
         }
 
-        const analysis = await analyzeArticle(raw.title, enriched.rawContent);
-
-        let marketValidation = null;
-        if (analysis) {
-          marketValidation = await validateWithMarketData({
-            issuerName: analysis.issuerName ?? null,
-            sentiment: analysis.sentiment ?? null,
-            finalUrgencyScore: analysis.finalUrgencyScore ?? null,
-            creditSignalScore: analysis.creditSignalScore ?? null,
-            etfSnapshot,
-          });
-        }
-
-        if (!analysis) {
-          jobLog.warn(
-            { title: raw.title.slice(0, 70) },
-            "AI processing returned null — storing as unprocessed stub"
-          );
-        }
-
+        // ── Eligible article: insert raw/pending, then invoke pipeline ──────
         const insertNow = new Date();
         const [persisted] = await db
           .insert(articlesTable)
@@ -334,95 +326,49 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
             rawContent: enriched.rawContent,
             contentSourceType: enriched.contentSourceType,
             contentDepthScore: enriched.contentDepthScore,
-            processFailureReason: analysis ? null : "ai_null",
             titleFingerprint: titleFp,
             contentFingerprint: enrichedContentFp,
-
-            processingStatus: (analysis ? "processed" : "failed") satisfies ArticleProcessingStatus,
-            processingError: analysis ? null : "ai_null",
-            processingStage: analysis ? "validated" : "raw",
+            processingStatus: "pending" satisfies ArticleProcessingStatus,
+            processingStage: "raw",
             lastProcessedAt: insertNow,
-
-            summary: sanitizeNullStr(analysis?.summary),
-            sector: sanitizeNullStr(analysis?.sector),
-            eventType: sanitizeNullStr(analysis?.eventType),
-            sentiment: sanitizeNullStr(analysis?.sentiment),
-            whyItMatters: sanitizeNullStr(analysis?.whyItMatters),
-            whoCares: analysis ? sanitizeNullStr(analysis.whoCares.join(", ")) : null,
-
-            cloImpact: analysis?.cloImpact ?? false,
-            issuerName: sanitizeIssuer(analysis?.issuerName),
-
-            urgencyScore: analysis?.urgencyScore ?? null,
-            covenantFlag: analysis?.covenantFlag ?? false,
-            ratingMentioned: sanitizeNullStr(analysis?.ratingMentioned),
-            ratingAgency: sanitizeNullStr(analysis?.ratingAgency),
-            marketImpact: sanitizeNullStr(analysis?.marketImpact),
-
-            finalUrgencyScore: analysis?.finalUrgencyScore ?? null,
-            creditSignalScore: analysis?.creditSignalScore ?? null,
-
-            tradeDirection: sanitizeNullStr(analysis?.tradeDirection),
-            tradeRationale: sanitizeNullStr(analysis?.tradeRationale),
-            potentialTrades: analysis?.potentialTrades ?? null,
-            marketsImpacted: analysis?.marketsImpacted ?? null,
-
-            leverageMentioned: analysis?.leverageMentioned ?? false,
-            liquidityConcern: analysis?.liquidityConcern ?? false,
-            refinancingRisk: analysis?.refinancingRisk ?? false,
-            earningsMiss: analysis?.earningsMiss ?? false,
-
-            ratingIsDowngrade: analysis?.ratingIsDowngrade ?? false,
-            ratingIsUpgrade: analysis?.ratingIsUpgrade ?? false,
-            ratingIsCCCThreshold: analysis?.ratingIsCCCThreshold ?? false,
-
-            covenantType: sanitizeNullStr(analysis?.covenantType),
-
-            cloRelevance: sanitizeNullStr(analysis?.cloRelevance),
-            cloLoanVsBond: sanitizeNullStr(analysis?.cloLoanVsBond),
-            cloWarfImpact: sanitizeNullStr(analysis?.cloWarfImpact),
-            cloCCCBucketRisk: analysis?.cloCCCBucketRisk ?? false,
-            cloExplanation: sanitizeNullStr(analysis?.cloExplanation),
-            cloImpactTypes: analysis?.cloImpactTypes ?? null,
-
-            spreadWideningRisk: analysis?.spreadWideningRisk ?? false,
-            forcedSellingRisk: analysis?.forcedSellingRisk ?? false,
-            distressedRisk: analysis?.distressedRisk ?? false,
-
-            stockMove1D: marketValidation?.stockMove1D ?? null,
-            stockMove5D: marketValidation?.stockMove5D ?? null,
-            hyETFMove: marketValidation?.hyETFMove ?? null,
-            marketValidationSignal: marketValidation?.validationSignal ?? null,
-            confidenceScore: marketValidation?.confidenceScore ?? null,
-
-            creditSummaryJson: analysis?.creditSummary ?? null,
-            scoreExplanationJson: analysis?.scoreExplanation ?? null,
-
-            processedAt: analysis ? insertNow : null,
           })
-          .returning({
-            id: articlesTable.id,
-            issuerName: articlesTable.issuerName,
-            finalUrgencyScore: articlesTable.finalUrgencyScore,
-            eventType: articlesTable.eventType,
-            covenantFlag: articlesTable.covenantFlag,
-          });
+          .returning({ id: articlesTable.id });
 
         metrics.articlesInserted++;
-        if (analysis) metrics.articlesFullyProcessed++;
+        metrics.articlesInsertedRaw++;
 
-        if (analysis && persisted?.issuerName) {
-          const alertCount = await evaluateAlerts({
-            id: persisted.id,
-            issuerName: persisted.issuerName,
-            title: raw.title,
-            finalUrgencyScore: persisted.finalUrgencyScore,
-            eventType: persisted.eventType,
-            covenantFlag: persisted.covenantFlag ?? false,
-          });
-          if (alertCount > 0) {
-            jobLog.info({ articleId: persisted.id, alertCount }, "Alert events created");
-          }
+        if (!persisted) {
+          jobLog.error({ url: raw.url }, "Insert returned no row — skipping pipeline invocation");
+          metrics.articlesProcessingFailed++;
+          continue;
+        }
+
+        jobLog.info(
+          { articleId: persisted.id, title: raw.title.slice(0, 70) },
+          "Eligible article inserted as raw/pending — invoking pipeline"
+        );
+
+        try {
+          await processArticlePipeline(persisted.id, jobId, jobLog);
+          metrics.articlesPipelineTriggered++;
+          metrics.articlesFullyProcessed++; // backward-compat alias
+        } catch (pipelineErr) {
+          const errMsg = pipelineErr instanceof Error ? pipelineErr.message : String(pipelineErr);
+          metrics.articlesPipelineFailedToStart++;
+          metrics.articlesProcessingFailed++;
+          jobLog.error(
+            { err: pipelineErr, articleId: persisted.id, jobId },
+            "Pipeline invocation failed — persisting failure state on article"
+          );
+          await db
+            .update(articlesTable)
+            .set({
+              processingStatus: "failed",
+              processingError: "pipeline_start_failed",
+              lastStageError: errMsg,
+              lastProcessedAt: new Date(),
+            })
+            .where(eq(articlesTable.id, persisted.id));
         }
 
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -451,6 +397,10 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
       articlesProcessingFailed: 0,
       articlesFullyProcessed: 0,
       totalDurationMs: Date.now() - startTime,
+      articlesInsertedRaw: 0,
+      articlesFiltered: 0,
+      articlesPipelineTriggered: 0,
+      articlesPipelineFailedToStart: 0,
       message: "Ingestion skipped: another ingestion job is already running",
     };
   }
@@ -467,6 +417,10 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
     feedsSucceeded,
     feedsFailed,
     articlesInserted,
+    articlesInsertedRaw,
+    articlesFiltered,
+    articlesPipelineTriggered,
+    articlesPipelineFailedToStart,
   } = result;
 
   return {
@@ -481,7 +435,11 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
     articlesProcessingFailed,
     articlesFullyProcessed,
     totalDurationMs,
-    message: `Ingestion complete: ${articlesFullyProcessed} articles fully processed, ${articlesSkippedDuplicate} duplicates skipped, ${articlesSkippedFiltered} filtered, ${articlesProcessingFailed} errors (${totalDurationMs}ms)`,
+    articlesInsertedRaw,
+    articlesFiltered,
+    articlesPipelineTriggered,
+    articlesPipelineFailedToStart,
+    message: `Ingestion complete: ${articlesPipelineTriggered} pipeline(s) triggered, ${articlesFiltered} filtered, ${articlesSkippedDuplicate} duplicates skipped, ${articlesPipelineFailedToStart} pipeline start error(s) (${totalDurationMs}ms)`,
   };
 }
 

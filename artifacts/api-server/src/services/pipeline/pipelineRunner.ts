@@ -55,7 +55,7 @@ import type {
 } from "./types";
 import { STAGE_ORDER, getNextStage, STAGE_RETRY_MAX } from "./types";
 import { PIPELINE_VERSION, PROMPT_VERSION, MODEL_VERSION, RULE_SET_VERSION, CONFIDENCE_VERSION } from "./traceability";
-import { sanitizeNullStr } from "../ingestionService";
+import { sanitizeNullStr } from "../../lib/stringUtils";
 import { evaluateAlertsForArticle } from "../alertEvaluationService";
 
 // ---------------------------------------------------------------------------
