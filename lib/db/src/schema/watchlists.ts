@@ -1,12 +1,19 @@
-import { pgTable, serial, text, timestamp, integer, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, uniqueIndex, index, uuid } from "drizzle-orm/pg-core";
+import { organizationsTable } from "./tenants";
 
 export const watchlistsTable = pgTable("watchlists", {
   id: serial("id").primaryKey(),
+  /** Owning organization. Nullable so existing rows without an org remain valid. */
+  organizationId: uuid("organization_id")
+    .references(() => organizationsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+},
+(t) => [
+  index("watchlists_org_idx").on(t.organizationId),
+]);
 
 export type Watchlist = typeof watchlistsTable.$inferSelect;
 export type NewWatchlist = typeof watchlistsTable.$inferInsert;

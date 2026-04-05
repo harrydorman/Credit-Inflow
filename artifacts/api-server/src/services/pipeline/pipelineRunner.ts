@@ -56,6 +56,7 @@ import type {
 import { STAGE_ORDER, getNextStage, STAGE_RETRY_MAX } from "./types";
 import { PIPELINE_VERSION, PROMPT_VERSION, MODEL_VERSION, RULE_SET_VERSION, CONFIDENCE_VERSION } from "./traceability";
 import { sanitizeNullStr } from "../ingestionService";
+import { evaluateAlertsForArticle } from "../alertEvaluationService";
 
 // ---------------------------------------------------------------------------
 // Main entry point
@@ -641,6 +642,14 @@ export async function processArticlePipeline(
         },
         "pipeline: complete"
       );
+
+      // ── Phase 3: Trigger alert evaluation (non-fatal) ─────────────────────
+      evaluateAlertsForArticle(articleId).catch((alertErr) => {
+        pipelineLog.error(
+          { alertErr, articleId },
+          "pipeline: alert evaluation failed (non-fatal)"
+        );
+      });
 
       return {
         articleId,

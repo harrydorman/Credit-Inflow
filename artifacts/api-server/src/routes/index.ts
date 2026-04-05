@@ -10,6 +10,8 @@ import marketOverviewRouter from "./marketOverview";
 import debugRouter from "./debug";
 import watchlistsRouter from "./watchlists";
 import alertsRouter from "./alerts";
+import portfoliosRouter from "./portfolios";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
@@ -24,5 +26,7 @@ router.use(marketOverviewRouter);
 router.use(debugRouter);
 router.use(watchlistsRouter);
 router.use(alertsRouter);
+router.use(portfoliosRouter);
+router.use(notificationsRouter);
 
 export default router;
