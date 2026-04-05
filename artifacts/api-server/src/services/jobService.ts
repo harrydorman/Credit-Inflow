@@ -355,15 +355,125 @@ export async function scheduleRetry(
 // ---------------------------------------------------------------------------
 
 /**
- * Convenience wrapper: runs `fn` inside a managed job lifecycle.
+ * Inserts a "queued" job record without executing it.
  *
- * - Acquires advisory lock + creates job record
- * - Calls `fn(jobId)` to execute the job body
- * - On success: marks job completed, returns stats
- * - On `NonRetryableError`: permanently fails the job, re-throws
- * - On other errors: schedules retry if attempts remain, re-throws
- * - If lock cannot be acquired: returns `null`
+ * Used by the ingestion service to register pipeline work that a worker
+ * process will pick up and execute asynchronously.
+ *
+ * Returns the new `jobId` string, or `null` if a job is already active
+ * (any non-terminal status: queued, running, or retrying) for this
+ * (type, scopeKey) slot.  The active-job check uses the same `findActiveJob`
+ * helper as `withJob`.
  */
+export async function enqueueJob(
+  type: JobType,
+  scopeKey: string,
+  maxAttempts = 3
+): Promise<string | null> {
+  const conflict = await findActiveJob(type, scopeKey);
+  if (conflict) {
+    logger.debug(
+      { type, scopeKey, conflictingJobId: conflict.conflictingJobId },
+      "jobService: active job already exists for this slot — skipping enqueue"
+    );
+    return null;
+  }
+
+  const jobId = randomUUID();
+  const [record] = await db
+    .insert(jobsTable)
+    .values({
+      jobId,
+      type,
+      scopeKey,
+      status: "queued",
+      attemptCount: 0,
+      maxAttempts,
+    })
+    .returning({ id: jobsTable.id, jobId: jobsTable.jobId });
+
+  if (!record) {
+    logger.error({ type, scopeKey }, "jobService: enqueueJob — insert returned no record");
+    return null;
+  }
+
+  logger.info({ jobId: record.jobId, type, scopeKey }, "jobService: job queued");
+  return record.jobId;
+}
+
+/**
+ * Picks up a "queued" job by (type, scopeKey), transitions it to "running",
+ * and executes `fn(jobId)` under an advisory lock.
+ *
+ * Mirrors `withJob` but for pre-existing queued records instead of creating
+ * a new one.  Intended for use by worker processes that poll for due jobs.
+ *
+ * Returns the function result on success, or `null` if no queued record
+ * exists or the lock cannot be acquired.
+ */
+export async function runQueuedJob<T extends Record<string, unknown>>(
+  type: JobType,
+  scopeKey: string,
+  fn: (jobId: string) => Promise<T>
+): Promise<T | null> {
+  const [queued] = await db
+    .select({
+      id: jobsTable.id,
+      jobId: jobsTable.jobId,
+      type: jobsTable.type,
+      scopeKey: jobsTable.scopeKey,
+      status: jobsTable.status,
+      attemptCount: jobsTable.attemptCount,
+      maxAttempts: jobsTable.maxAttempts,
+      retryable: jobsTable.retryable,
+    })
+    .from(jobsTable)
+    .where(
+      and(
+        eq(jobsTable.type, type),
+        eq(jobsTable.scopeKey, scopeKey),
+        eq(jobsTable.status, "queued")
+      )
+    )
+    .limit(1);
+
+  if (!queued) return null;
+
+  const lockKey = advisoryLockKey(type, scopeKey);
+  const lockClient = await acquireLock(lockKey);
+  if (!lockClient) {
+    logger.warn(
+      { type, scopeKey, lockKey },
+      "jobService: runQueuedJob — could not acquire advisory lock"
+    );
+    return null;
+  }
+
+  const updatedAttemptCount = queued.attemptCount + 1;
+  await db
+    .update(jobsTable)
+    .set({ status: "running", startedAt: new Date(), attemptCount: updatedAttemptCount })
+    .where(eq(jobsTable.id, queued.id));
+
+  const jobRecord: JobRecord = {
+    ...(queued as Omit<typeof queued, "status"> & { status: JobStatus }),
+    status: "running" as JobStatus,
+    attemptCount: updatedAttemptCount,
+  };
+
+  try {
+    const stats = await fn(jobRecord.jobId);
+    await finishJob(jobRecord, lockClient, { success: true, stats });
+    return stats;
+  } catch (err) {
+    const isNonRetryable = err instanceof NonRetryableError;
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    await scheduleRetry(jobRecord, lockClient, errorMessage, isNonRetryable);
+    throw err;
+  }
+}
+
+
 export async function withJob<T extends Record<string, unknown>>(
   type: JobType,
   scopeKey: string,

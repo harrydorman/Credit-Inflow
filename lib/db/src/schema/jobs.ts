@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export type JobType = "ingestion" | "backfill" | "alert_eval";
+export type JobType = "ingestion" | "backfill" | "alert_eval" | "article_pipeline";
 export type JobStatus = "queued" | "running" | "completed" | "failed" | "retrying";
 
 export const jobsTable = pgTable(
