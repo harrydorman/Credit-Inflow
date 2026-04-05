@@ -6,12 +6,11 @@
  * OpenAPI spec version: 0.3.0
  */
 
-export type TrendAlertSeverity =
-  (typeof TrendAlertSeverity)[keyof typeof TrendAlertSeverity];
+export type AlertFeedbackRating =
+  (typeof AlertFeedbackRating)[keyof typeof AlertFeedbackRating];
 
-export const TrendAlertSeverity = {
-  critical: "critical",
-  high: "high",
-  moderate: "moderate",
-  watch: "watch",
+export const AlertFeedbackRating = {
+  useful: "useful",
+  noise: "noise",
+  investigate_later: "investigate_later",
 } as const;

@@ -22,8 +22,9 @@ import {
   watchlistItemsTable,
   portfolioIssuerMapTable,
   portfolioHoldingsTable,
+  portfoliosTable,
 } from "@workspace/db";
-import { and, eq, inArray, or, gte, desc } from "drizzle-orm";
+import { and, eq, inArray, or, gte, lte, desc, count } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
 // ---------------------------------------------------------------------------
@@ -385,4 +386,129 @@ export async function getPortfolioExposureAlerts(
     if (b.mediumSeverityCount !== a.mediumSeverityCount) return b.mediumSeverityCount - a.mediumSeverityCount;
     return b.latestTriggeredAt.getTime() - a.latestTriggeredAt.getTime();
   });
+}
+
+// ---------------------------------------------------------------------------
+// Org-scoped alert query
+// ---------------------------------------------------------------------------
+
+export interface AlertsFilter {
+  severity?: "high" | "medium" | "low";
+  issuerName?: string;
+  eventType?: string;
+  isRead?: boolean;
+  portfolioLinked?: boolean;
+  dateFrom?: Date;
+  dateTo?: Date;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AlertsPage {
+  alerts: Array<typeof alertEventsTable.$inferSelect & { portfolioLinked: boolean }>;
+  total: number;
+}
+
+/**
+ * Returns alert events for an organization with optional filters and pagination.
+ * Org safety: joins alertEvents → alertRules and filters by organizationId.
+ */
+export async function getAlertsForOrganization(
+  orgId: string,
+  filters: AlertsFilter = {},
+): Promise<AlertsPage> {
+  const {
+    severity,
+    issuerName,
+    eventType,
+    isRead,
+    dateFrom,
+    dateTo,
+    limit = 50,
+    offset = 0,
+  } = filters;
+
+  // Build WHERE conditions for alert_events joined with alert_rules
+  const conditions: Parameters<typeof and>[0][] = [
+    eq(alertRulesTable.organizationId, orgId),
+  ];
+
+  if (severity !== undefined) {
+    conditions.push(eq(alertEventsTable.severity, severity));
+  }
+  if (issuerName !== undefined) {
+    conditions.push(eq(alertEventsTable.issuerName, issuerName));
+  }
+  if (eventType !== undefined) {
+    conditions.push(eq(alertEventsTable.eventType, eventType));
+  }
+  if (isRead !== undefined) {
+    conditions.push(eq(alertEventsTable.isRead, isRead));
+  }
+  if (dateFrom !== undefined) {
+    conditions.push(gte(alertEventsTable.triggeredAt, dateFrom));
+  }
+  if (dateTo !== undefined) {
+    conditions.push(lte(alertEventsTable.triggeredAt, dateTo));
+  }
+
+  const where = and(...conditions);
+
+  // Get portfolio issuer set for this org's portfolios to tag alerts
+  const portfolioIssuers = await db
+    .selectDistinct({ issuerName: portfolioIssuerMapTable.canonicalIssuerName })
+    .from(portfolioIssuerMapTable)
+    .innerJoin(
+      portfolioHoldingsTable,
+      eq(portfolioIssuerMapTable.portfolioHoldingId, portfolioHoldingsTable.id),
+    )
+    .innerJoin(
+      portfoliosTable,
+      eq(portfolioHoldingsTable.portfolioId, portfoliosTable.id),
+    )
+    .where(eq(portfoliosTable.organizationId, orgId));
+
+  const portfolioIssuerSet = new Set(portfolioIssuers.map((r) => r.issuerName));
+
+  const [rows, [{ value: total }]] = await Promise.all([
+    db
+      .select({
+        id: alertEventsTable.id,
+        alertRuleId: alertEventsTable.alertRuleId,
+        watchlistId: alertEventsTable.watchlistId,
+        articleId: alertEventsTable.articleId,
+        issuerName: alertEventsTable.issuerName,
+        title: alertEventsTable.title,
+        urgency: alertEventsTable.urgency,
+        eventType: alertEventsTable.eventType,
+        confidence: alertEventsTable.confidence,
+        severity: alertEventsTable.severity,
+        triggeredAt: alertEventsTable.triggeredAt,
+        isRead: alertEventsTable.isRead,
+      })
+      .from(alertEventsTable)
+      .innerJoin(alertRulesTable, eq(alertEventsTable.alertRuleId, alertRulesTable.id))
+      .where(where)
+      .orderBy(desc(alertEventsTable.triggeredAt))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ value: count() })
+      .from(alertEventsTable)
+      .innerJoin(alertRulesTable, eq(alertEventsTable.alertRuleId, alertRulesTable.id))
+      .where(where),
+  ]);
+
+  // Apply portfolioLinked filter after fetch (or tag)
+  const tagged = rows.map((r) => ({
+    ...r,
+    portfolioLinked: portfolioIssuerSet.has(r.issuerName),
+  }));
+
+  const finalAlerts =
+    filters.portfolioLinked !== undefined
+      ? tagged.filter((r) => r.portfolioLinked === filters.portfolioLinked)
+      : tagged;
+
+  return { alerts: finalAlerts, total };
 }

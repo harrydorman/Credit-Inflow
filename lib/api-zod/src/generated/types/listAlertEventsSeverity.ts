@@ -6,15 +6,10 @@
  * OpenAPI spec version: 0.3.0
  */
 
-/**
- * Combined AI signal strength + market confirmation
- * @nullable
- */
-export type ArticleConfidenceScore =
-  | (typeof ArticleConfidenceScore)[keyof typeof ArticleConfidenceScore]
-  | null;
+export type ListAlertEventsSeverity =
+  (typeof ListAlertEventsSeverity)[keyof typeof ListAlertEventsSeverity];
 
-export const ArticleConfidenceScore = {
+export const ListAlertEventsSeverity = {
   high: "high",
   medium: "medium",
   low: "low",

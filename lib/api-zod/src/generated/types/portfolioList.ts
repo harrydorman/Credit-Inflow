@@ -5,9 +5,8 @@
  * Credit Intelligence Dashboard API — Real-time credit risk detection and trade signal platform
  * OpenAPI spec version: 0.3.0
  */
-import type { AlertEvent } from "./alertEvent";
+import type { Portfolio } from "./portfolio";
 
-export interface AlertEventList {
-  alerts: AlertEvent[];
-  total: number;
+export interface PortfolioList {
+  portfolios: Portfolio[];
 }

@@ -5,10 +5,18 @@
  * Credit Intelligence Dashboard API — Real-time credit risk detection and trade signal platform
  * OpenAPI spec version: 0.3.0
  */
+import type { ListAlertEventsSeverity } from "./listAlertEventsSeverity";
 
 export type ListAlertEventsParams = {
-watchlistId?: number;
-isRead?: boolean;
-limit?: number;
-offset?: number;
+  organizationId?: string;
+  watchlistId?: number;
+  isRead?: boolean;
+  severity?: ListAlertEventsSeverity;
+  issuerName?: string;
+  eventType?: string;
+  portfolioLinked?: boolean;
+  dateFrom?: Date;
+  dateTo?: Date;
+  limit?: number;
+  offset?: number;
 };

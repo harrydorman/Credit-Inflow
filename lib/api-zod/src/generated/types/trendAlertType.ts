@@ -6,13 +6,13 @@
  * OpenAPI spec version: 0.3.0
  */
 
-export type TrendAlertType = typeof TrendAlertType[keyof typeof TrendAlertType];
-
+export type TrendAlertType =
+  (typeof TrendAlertType)[keyof typeof TrendAlertType];
 
 export const TrendAlertType = {
-  sector_cluster: 'sector_cluster',
-  issuer_deterioration: 'issuer_deterioration',
-  refinancing_wave: 'refinancing_wave',
-  downgrade_wave: 'downgrade_wave',
-  emerging: 'emerging',
+  sector_cluster: "sector_cluster",
+  issuer_deterioration: "issuer_deterioration",
+  refinancing_wave: "refinancing_wave",
+  downgrade_wave: "downgrade_wave",
+  emerging: "emerging",
 } as const;

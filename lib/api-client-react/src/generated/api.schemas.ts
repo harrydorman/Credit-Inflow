@@ -17,26 +17,28 @@ export interface ErrorResponse {
  * confirmed: news + market aligned; mixed: divergence; unconfirmed: no market data
  * @nullable
  */
-export type ArticleMarketValidationSignal = typeof ArticleMarketValidationSignal[keyof typeof ArticleMarketValidationSignal] | null;
-
+export type ArticleMarketValidationSignal =
+  | (typeof ArticleMarketValidationSignal)[keyof typeof ArticleMarketValidationSignal]
+  | null;
 
 export const ArticleMarketValidationSignal = {
-  confirmed: 'confirmed',
-  mixed: 'mixed',
-  unconfirmed: 'unconfirmed',
+  confirmed: "confirmed",
+  mixed: "mixed",
+  unconfirmed: "unconfirmed",
 } as const;
 
 /**
  * Combined AI signal strength + market confirmation
  * @nullable
  */
-export type ArticleConfidenceScore = typeof ArticleConfidenceScore[keyof typeof ArticleConfidenceScore] | null;
-
+export type ArticleConfidenceScore =
+  | (typeof ArticleConfidenceScore)[keyof typeof ArticleConfidenceScore]
+  | null;
 
 export const ArticleConfidenceScore = {
-  high: 'high',
-  medium: 'medium',
-  low: 'low',
+  high: "high",
+  medium: "medium",
+  low: "low",
 } as const;
 
 /**
@@ -181,13 +183,13 @@ export interface EventTypeSignal {
   sectors: string[];
 }
 
-export type IssuerSignalRiskTrend = typeof IssuerSignalRiskTrend[keyof typeof IssuerSignalRiskTrend];
-
+export type IssuerSignalRiskTrend =
+  (typeof IssuerSignalRiskTrend)[keyof typeof IssuerSignalRiskTrend];
 
 export const IssuerSignalRiskTrend = {
-  improving: 'improving',
-  stable: 'stable',
-  deteriorating: 'deteriorating',
+  improving: "improving",
+  stable: "stable",
+  deteriorating: "deteriorating",
 } as const;
 
 export interface IssuerSignal {
@@ -216,13 +218,13 @@ export interface IssuerList {
   total: number;
 }
 
-export type IssuerThesisCreditView = typeof IssuerThesisCreditView[keyof typeof IssuerThesisCreditView];
-
+export type IssuerThesisCreditView =
+  (typeof IssuerThesisCreditView)[keyof typeof IssuerThesisCreditView];
 
 export const IssuerThesisCreditView = {
-  positive: 'positive',
-  negative: 'negative',
-  neutral: 'neutral',
+  positive: "positive",
+  negative: "negative",
+  neutral: "neutral",
 } as const;
 
 export interface IssuerThesis {
@@ -235,34 +237,34 @@ export interface IssuerThesis {
   articleCount: number;
 }
 
-export type TrendAlertType = typeof TrendAlertType[keyof typeof TrendAlertType];
-
+export type TrendAlertType =
+  (typeof TrendAlertType)[keyof typeof TrendAlertType];
 
 export const TrendAlertType = {
-  sector_cluster: 'sector_cluster',
-  issuer_deterioration: 'issuer_deterioration',
-  refinancing_wave: 'refinancing_wave',
-  downgrade_wave: 'downgrade_wave',
-  emerging: 'emerging',
+  sector_cluster: "sector_cluster",
+  issuer_deterioration: "issuer_deterioration",
+  refinancing_wave: "refinancing_wave",
+  downgrade_wave: "downgrade_wave",
+  emerging: "emerging",
 } as const;
 
-export type TrendAlertSeverity = typeof TrendAlertSeverity[keyof typeof TrendAlertSeverity];
-
+export type TrendAlertSeverity =
+  (typeof TrendAlertSeverity)[keyof typeof TrendAlertSeverity];
 
 export const TrendAlertSeverity = {
-  critical: 'critical',
-  high: 'high',
-  moderate: 'moderate',
-  watch: 'watch',
+  critical: "critical",
+  high: "high",
+  moderate: "moderate",
+  watch: "watch",
 } as const;
 
-export type TrendAlertTrendStrength = typeof TrendAlertTrendStrength[keyof typeof TrendAlertTrendStrength];
-
+export type TrendAlertTrendStrength =
+  (typeof TrendAlertTrendStrength)[keyof typeof TrendAlertTrendStrength];
 
 export const TrendAlertTrendStrength = {
-  increasing: 'increasing',
-  stable: 'stable',
-  weakening: 'weakening',
+  increasing: "increasing",
+  stable: "stable",
+  weakening: "weakening",
 } as const;
 
 export interface TrendAlert {
@@ -296,11 +298,11 @@ export interface TrendAlertsResponse {
   articlesAnalyzed: number;
 }
 
-export type TrendsDebugSectorCounts = {[key: string]: number};
+export type TrendsDebugSectorCounts = { [key: string]: number };
 
-export type TrendsDebugEventTypeCounts = {[key: string]: number};
+export type TrendsDebugEventTypeCounts = { [key: string]: number };
 
-export type TrendsDebugNegativeSentimentCounts = {[key: string]: number};
+export type TrendsDebugNegativeSentimentCounts = { [key: string]: number };
 
 export interface TrendsDebug {
   articlesAnalyzed: number;
@@ -371,12 +373,12 @@ export type MarketOverviewMacro = {
   lqdLastClose?: number | null;
 };
 
-export type MarketOverviewRiskSummaryOverallCondition = typeof MarketOverviewRiskSummaryOverallCondition[keyof typeof MarketOverviewRiskSummaryOverallCondition];
-
+export type MarketOverviewRiskSummaryOverallCondition =
+  (typeof MarketOverviewRiskSummaryOverallCondition)[keyof typeof MarketOverviewRiskSummaryOverallCondition];
 
 export const MarketOverviewRiskSummaryOverallCondition = {
-  stable: 'stable',
-  deteriorating: 'deteriorating',
+  stable: "stable",
+  deteriorating: "deteriorating",
 } as const;
 
 export type MarketOverviewRiskSummary = {
@@ -558,34 +560,200 @@ export interface UpdateAlertRuleRequest {
   covenantFlagOnly?: boolean;
 }
 
+export type AlertFeedbackRequestRating =
+  (typeof AlertFeedbackRequestRating)[keyof typeof AlertFeedbackRequestRating];
+
+export const AlertFeedbackRequestRating = {
+  useful: "useful",
+  noise: "noise",
+  investigate_later: "investigate_later",
+} as const;
+
+export interface AlertFeedbackRequest {
+  organizationId: string;
+  userId?: string | null;
+  rating: AlertFeedbackRequestRating;
+  note?: string | null;
+}
+
+export type AlertFeedbackRating =
+  (typeof AlertFeedbackRating)[keyof typeof AlertFeedbackRating];
+
+export const AlertFeedbackRating = {
+  useful: "useful",
+  noise: "noise",
+  investigate_later: "investigate_later",
+} as const;
+
+export interface AlertFeedback {
+  id: number;
+  alertEventId: number;
+  organizationId: string;
+  /** @nullable */
+  userId?: string | null;
+  rating: AlertFeedbackRating;
+  /** @nullable */
+  note?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BulkMarkReadRequest {
+  /** @minItems 1 */
+  ids: number[];
+  organizationId?: string;
+}
+
+export interface BulkMarkReadResult {
+  updated: number;
+}
+
+export interface Portfolio {
+  id: number;
+  organizationId: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PortfolioList {
+  portfolios: Portfolio[];
+}
+
+export interface PortfolioHolding {
+  id: number;
+  portfolioId: number;
+  issuerName: string;
+  /** @nullable */
+  positionSize?: number | null;
+  /** @nullable */
+  canonicalIssuerName?: string | null;
+  /** @nullable */
+  mappingConfidence?: number | null;
+  createdAt: string;
+}
+
+export interface PortfolioHoldingList {
+  holdings: PortfolioHolding[];
+}
+
+export interface PortfolioDetail {
+  id: number;
+  organizationId: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  holdingsCount: number;
+  mappedIssuerCount: number;
+  unmappedIssuerCount: number;
+  alertCount: number;
+  highSeverityAlertCount: number;
+  holdings: PortfolioHolding[];
+}
+
+export interface PortfolioIngestionResult {
+  portfolioId: number;
+  rowsProcessed: number;
+  holdingsCreated: number;
+  holdingsSkipped: number;
+  issuersMapped: number;
+  issuersUnmapped: number;
+  errors: string[];
+}
+
+export type PortfolioExposureAlertEventsItem = {
+  id: number;
+  alertRuleId: number;
+  articleId: number;
+  /** @nullable */
+  eventType?: string | null;
+  /** @nullable */
+  confidence?: number | null;
+  /** @nullable */
+  severity?: string | null;
+  triggeredAt: string;
+  isRead: boolean;
+};
+
+export interface PortfolioExposureAlert {
+  issuerName: string;
+  totalAlerts: number;
+  highSeverityCount: number;
+  mediumSeverityCount: number;
+  lowSeverityCount: number;
+  latestTriggeredAt: string;
+  events: PortfolioExposureAlertEventsItem[];
+}
+
+export interface PortfolioExposureAlertList {
+  alerts: PortfolioExposureAlert[];
+}
+
+export interface CreatePortfolioRequest {
+  organizationId: string;
+  name: string;
+  description?: string | null;
+}
+
 export type ListArticlesParams = {
-sector?: string;
-eventType?: string;
-sentiment?: string;
-issuerName?: string;
-covenantFlag?: boolean;
-marketImpact?: string;
-minUrgency?: number;
-limit?: number;
-offset?: number;
+  sector?: string;
+  eventType?: string;
+  sentiment?: string;
+  issuerName?: string;
+  covenantFlag?: boolean;
+  marketImpact?: string;
+  minUrgency?: number;
+  limit?: number;
+  offset?: number;
 };
 
 export type GetTrendsParams = {
-windowHours?: number;
+  windowHours?: number;
 };
 
 export type GetWatchlistArticlesParams = {
-limit?: number;
+  limit?: number;
 };
 
 export type ListAlertEventsParams = {
-watchlistId?: number;
-isRead?: boolean;
-limit?: number;
-offset?: number;
+  organizationId?: string;
+  watchlistId?: number;
+  isRead?: boolean;
+  severity?: ListAlertEventsSeverity;
+  issuerName?: string;
+  eventType?: string;
+  portfolioLinked?: boolean;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+  offset?: number;
 };
+
+export type ListAlertEventsSeverity =
+  (typeof ListAlertEventsSeverity)[keyof typeof ListAlertEventsSeverity];
+
+export const ListAlertEventsSeverity = {
+  high: "high",
+  medium: "medium",
+  low: "low",
+} as const;
 
 export type ListAlertRulesParams = {
-watchlistId?: number;
+  watchlistId?: number;
 };
 
+export type ListPortfoliosParams = {
+  organizationId: string;
+};
+
+export type GetPortfolioDetailsParams = {
+  organizationId: string;
+};
+
+export type IngestPortfolioCSVBody = {
+  csv: string;
+};

@@ -7,5 +7,5 @@
  */
 
 export type GetTrendsParams = {
-windowHours?: number;
+  windowHours?: number;
 };

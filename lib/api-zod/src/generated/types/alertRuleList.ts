@@ -5,7 +5,7 @@
  * Credit Intelligence Dashboard API — Real-time credit risk detection and trade signal platform
  * OpenAPI spec version: 0.3.0
  */
-import type { AlertRule } from './alertRule';
+import type { AlertRule } from "./alertRule";
 
 export interface AlertRuleList {
   rules: AlertRule[];
