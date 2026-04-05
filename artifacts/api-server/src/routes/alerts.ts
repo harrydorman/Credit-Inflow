@@ -1,51 +1,52 @@
 import { Router, type IRouter } from "express";
-import { db, alertRulesTable, alertEventsTable, watchlistsTable } from "@workspace/db";
+import { db, alertRulesTable, alertEventsTable, alertFeedbackTable, watchlistsTable } from "@workspace/db";
 import {
   ListAlertEventsQueryParams,
   ListAlertRulesQueryParams,
   CreateAlertRuleBody,
   MarkAlertReadParams,
+  MarkAlertUnreadParams,
   ToggleAlertRuleParams,
   DeleteAlertRuleParams,
   UpdateAlertRuleParams,
   UpdateAlertRuleBody,
+  BulkMarkAlertsReadBody,
+  SubmitAlertFeedbackParams,
+  SubmitAlertFeedbackBody,
 } from "@workspace/api-zod";
-import { eq, and, desc, count } from "drizzle-orm";
+import { eq, and, desc, count, inArray } from "drizzle-orm";
+import { requireOrgId } from "../middlewares/auth";
+import { getAlertsForOrganization, type AlertsFilter } from "../services/alertEvaluationService";
 
 const router: IRouter = Router();
 
-// GET /alerts
+// GET /alerts - List alert events for the authenticated org
 router.get("/alerts", async (req, res): Promise<void> => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
   const query = ListAlertEventsQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
     return;
   }
 
-  const { watchlistId, isRead, limit, offset } = query.data;
+  const { severity, issuerName, eventType, isRead, portfolioLinked, dateFrom, dateTo, limit, offset } = query.data;
 
-  const conditions = [];
-  if (watchlistId !== undefined) {
-    conditions.push(eq(alertEventsTable.watchlistId, watchlistId));
-  }
-  if (isRead !== undefined) {
-    conditions.push(eq(alertEventsTable.isRead, isRead));
-  }
+  const filters: AlertsFilter = {
+    ...(severity !== undefined && { severity }),
+    ...(issuerName !== undefined && { issuerName }),
+    ...(eventType !== undefined && { eventType }),
+    ...(isRead !== undefined && { isRead }),
+    ...(portfolioLinked !== undefined && { portfolioLinked }),
+    ...(dateFrom !== undefined && { dateFrom }),
+    ...(dateTo !== undefined && { dateTo }),
+    limit,
+    offset,
+  };
 
-  const where = conditions.length > 0 ? and(...conditions) : undefined;
-
-  const [alerts, [{ value: total }]] = await Promise.all([
-    db
-      .select()
-      .from(alertEventsTable)
-      .where(where)
-      .orderBy(desc(alertEventsTable.triggeredAt))
-      .limit(limit)
-      .offset(offset),
-    db.select({ value: count() }).from(alertEventsTable).where(where),
-  ]);
-
-  res.json({ alerts, total });
+  const result = await getAlertsForOrganization(orgId, filters);
+  res.json(result);
 });
 
 // GET /alerts/rules
@@ -112,6 +113,41 @@ router.post("/alerts/rules", async (req, res): Promise<void> => {
   res.status(201).json(created);
 });
 
+// POST /alerts/bulk-read - Bulk mark alert events as read (must be before /:id routes)
+router.post("/alerts/bulk-read", async (req, res): Promise<void> => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const body = BulkMarkAlertsReadBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const { ids } = body.data;
+
+  // Only update alerts that belong to this org (via their alert rule)
+  const validAlerts = await db
+    .select({ id: alertEventsTable.id })
+    .from(alertEventsTable)
+    .innerJoin(alertRulesTable, eq(alertEventsTable.alertRuleId, alertRulesTable.id))
+    .where(and(inArray(alertEventsTable.id, ids), eq(alertRulesTable.organizationId, orgId)));
+
+  const validIds = validAlerts.map((a) => a.id);
+  if (validIds.length === 0) {
+    res.json({ updated: 0 });
+    return;
+  }
+
+  const updated = await db
+    .update(alertEventsTable)
+    .set({ isRead: true })
+    .where(inArray(alertEventsTable.id, validIds))
+    .returning({ id: alertEventsTable.id });
+
+  res.json({ updated: updated.length });
+});
+
 // POST /alerts/:id/read
 router.post("/alerts/:id/read", async (req, res): Promise<void> => {
   const params = MarkAlertReadParams.safeParse({ id: req.params.id });
@@ -132,6 +168,89 @@ router.post("/alerts/:id/read", async (req, res): Promise<void> => {
   }
 
   res.json(updated);
+});
+
+// POST /alerts/:id/unread - Mark alert event as unread
+router.post("/alerts/:id/unread", async (req, res): Promise<void> => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const params = MarkAlertUnreadParams.safeParse({ id: req.params.id });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  // Verify org owns this alert
+  const [existing] = await db
+    .select({ id: alertEventsTable.id })
+    .from(alertEventsTable)
+    .innerJoin(alertRulesTable, eq(alertEventsTable.alertRuleId, alertRulesTable.id))
+    .where(and(eq(alertEventsTable.id, params.data.id), eq(alertRulesTable.organizationId, orgId)))
+    .limit(1);
+
+  if (!existing) {
+    res.status(404).json({ error: "Alert event not found" });
+    return;
+  }
+
+  const [updatedAlert] = await db
+    .update(alertEventsTable)
+    .set({ isRead: false })
+    .where(eq(alertEventsTable.id, params.data.id))
+    .returning();
+
+  res.json(updatedAlert);
+});
+
+// POST /alerts/:id/feedback - Submit usefulness feedback for an alert
+router.post("/alerts/:id/feedback", async (req, res): Promise<void> => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const params = SubmitAlertFeedbackParams.safeParse({ id: req.params.id });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = SubmitAlertFeedbackBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  // Verify org owns this alert
+  const [existing] = await db
+    .select({ id: alertEventsTable.id })
+    .from(alertEventsTable)
+    .innerJoin(alertRulesTable, eq(alertEventsTable.alertRuleId, alertRulesTable.id))
+    .where(and(eq(alertEventsTable.id, params.data.id), eq(alertRulesTable.organizationId, orgId)))
+    .limit(1);
+
+  if (!existing) {
+    res.status(404).json({ error: "Alert event not found" });
+    return;
+  }
+
+  const { userId, rating, note } = body.data;
+
+  const [feedback] = await db
+    .insert(alertFeedbackTable)
+    .values({
+      alertEventId: params.data.id,
+      organizationId: orgId,
+      userId: userId ?? null,
+      rating,
+      note: note ?? null,
+    })
+    .onConflictDoUpdate({
+      target: [alertFeedbackTable.alertEventId, alertFeedbackTable.organizationId, alertFeedbackTable.userId],
+      set: { rating, note: note ?? null, updatedAt: new Date() },
+    })
+    .returning();
+
+  res.json(feedback);
 });
 
 // POST /alerts/rules/:id/toggle
