@@ -186,7 +186,7 @@ export async function processArticlePipeline(
       stageOutputs.push(stageOut);
       pipelineLog.info({ stage: "eligibility", durationMs }, "pipeline: stage complete");
     } catch (err) {
-      return await handleStageError("enriched", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog);
+      return await handleStageError("enriched", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog, jobId);
     }
   }
 
@@ -224,7 +224,7 @@ export async function processArticlePipeline(
         "pipeline: stage complete"
       );
     } catch (err) {
-      return await handleStageError("enriched", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog);
+      return await handleStageError("enriched", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog, jobId);
     }
   }
 
@@ -346,7 +346,7 @@ export async function processArticlePipeline(
         "pipeline: stage complete"
       );
     } catch (err) {
-      return await handleStageError("classified", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog);
+      return await handleStageError("classified", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog, jobId);
     }
   }
 
@@ -401,7 +401,7 @@ export async function processArticlePipeline(
         "pipeline: stage complete"
       );
     } catch (err) {
-      return await handleStageError("scored", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog);
+      return await handleStageError("scored", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog, jobId);
     }
   }
 
@@ -490,7 +490,7 @@ export async function processArticlePipeline(
         needsReview: scoringData.needsReview,
       };
     } catch (err) {
-      return await handleStageError("validated", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog);
+      return await handleStageError("validated", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog, jobId);
     }
   }
 }
@@ -506,7 +506,8 @@ async function handleStageError(
   stageStart: number,
   stageOutputs: StageOutput[],
   articleId: number,
-  log: Logger
+  log: Logger,
+  jobId: string
 ): Promise<PipelineResult> {
   const durationMs = Date.now() - stageStart;
   const errorMessage =
@@ -542,7 +543,7 @@ async function handleStageError(
 
   return {
     articleId,
-    jobId: "",
+    jobId,
     finalStage: stage,
     finalStatus: "failed",
     totalDurationMs: Date.now() - pipelineStart,
