@@ -14,6 +14,12 @@
  *  - Eligible articles are inserted as raw/pending records only
  *  - processArticlePipeline is the sole AI-processing path for eligible articles
  *  - Filtered article behaviour (empty_content, noise_filtered) is preserved unchanged
+ *
+ * Phase 5 (async job-backed pipeline):
+ *  - Pipeline is no longer called synchronously during ingestion
+ *  - Instead, a "queued" article_pipeline job is created for each eligible article
+ *  - A worker process (future deployment) picks up and runs pipeline jobs
+ *  - Fixed 100ms throttle removed
  */
 import { and, isNull, isNotNull, eq } from "drizzle-orm";
 import { db, articlesTable } from "@workspace/db";
@@ -32,7 +38,7 @@ import {
   existingUrlSet,
 } from "./deduplication";
 import { withJob } from "./jobService";
-import { processArticlePipeline } from "./pipeline";
+import { enqueueArticlePipelineJob, AlreadyQueuedError } from "./articlePipelineJob";
 
 // ---------------------------------------------------------------------------
 // Shared sanitise helpers
@@ -98,10 +104,21 @@ export interface IngestionMetrics {
   articlesInsertedRaw: number;
   /** Articles inserted as filtered (empty_content or noise_filtered). */
   articlesFiltered: number;
-  /** Articles for which processArticlePipeline was invoked without error. */
+  /**
+   * Articles for which processArticlePipeline was invoked without error.
+   * @deprecated Use articlesPipelineJobsQueued (Phase 5). Retained for backward compat.
+   */
   articlesPipelineTriggered: number;
-  /** Articles where processArticlePipeline threw before completing. */
+  /**
+   * Articles where processArticlePipeline threw before completing.
+   * @deprecated Use articlesPipelineQueueFailed (Phase 5). Retained for backward compat.
+   */
   articlesPipelineFailedToStart: number;
+  // ── Phase 5 (async job-backed pipeline) ──────────────────────────────────
+  /** Eligible articles for which a pipeline job was successfully queued. */
+  articlesPipelineJobsQueued: number;
+  /** Eligible articles for which pipeline job creation failed. */
+  articlesPipelineQueueFailed: number;
 }
 
 export interface IngestionStats extends IngestionMetrics {
@@ -166,8 +183,12 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
       totalDurationMs: 0,
       articlesInsertedRaw: 0,
       articlesFiltered: 0,
+      // Phase 4 backward-compat aliases (mirror Phase 5 fields)
       articlesPipelineTriggered: 0,
       articlesPipelineFailedToStart: 0,
+      // Phase 5 primary fields
+      articlesPipelineJobsQueued: 0,
+      articlesPipelineQueueFailed: 0,
     };
 
     let allRaw: Awaited<ReturnType<typeof fetchAllArticles>> = [];
@@ -348,33 +369,43 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
 
         jobLog.info(
           { articleId: persisted.id, title: raw.title.slice(0, 70) },
-          "Eligible article inserted as raw/pending — invoking pipeline"
+          "Eligible article inserted as raw/pending — queueing pipeline job"
         );
 
         try {
-          await processArticlePipeline(persisted.id, jobId, jobLog);
-          metrics.articlesPipelineTriggered++;
-          metrics.articlesFullyProcessed++; // backward-compat alias
-        } catch (pipelineErr) {
-          const errMsg = pipelineErr instanceof Error ? pipelineErr.message : String(pipelineErr);
-          metrics.articlesPipelineFailedToStart++;
-          metrics.articlesProcessingFailed++;
-          jobLog.error(
-            { err: pipelineErr, articleId: persisted.id, jobId },
-            "Pipeline invocation failed — persisting failure state on article"
+          const { pipelineJobId } = await enqueueArticlePipelineJob(persisted.id, jobId, jobLog);
+          metrics.articlesPipelineJobsQueued++;
+          metrics.articlesPipelineTriggered++; // backward-compat alias
+          metrics.articlesFullyProcessed++;    // backward-compat alias
+          jobLog.info(
+            { articleId: persisted.id, pipelineJobId },
+            "article_pipeline: job queued successfully"
           );
-          await db
-            .update(articlesTable)
-            .set({
-              processingStatus: "failed",
-              processingError: "pipeline_start_failed",
-              lastStageError: errMsg,
-              lastProcessedAt: new Date(),
-            })
-            .where(eq(articlesTable.id, persisted.id));
+        } catch (queueErr) {
+          if (queueErr instanceof AlreadyQueuedError) {
+            // Benign: a pipeline job already exists for this article.
+            // Count it as queued so the metric is accurate.
+            metrics.articlesPipelineJobsQueued++;
+            metrics.articlesPipelineTriggered++;
+            metrics.articlesFullyProcessed++;
+            jobLog.debug(
+              { articleId: persisted.id },
+              "article_pipeline: job already active — counted as queued"
+            );
+          } else {
+            const errMsg = queueErr instanceof Error ? queueErr.message : String(queueErr);
+            metrics.articlesPipelineQueueFailed++;
+            metrics.articlesPipelineFailedToStart++; // backward-compat alias
+            metrics.articlesProcessingFailed++;
+            jobLog.error(
+              { err: queueErr, articleId: persisted.id, jobId },
+              "article_pipeline: failed to queue pipeline job — article remains raw/pending"
+            );
+            // NOTE: article is left as raw/pending — a future worker or backfill
+            // can pick it up without any additional state to clean up.
+            void errMsg; // suppress unused-var lint
+          }
         }
-
-        await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (err) {
         jobLog.error({ err, url: raw.url }, "Error processing article");
         metrics.articlesProcessingFailed++;
@@ -404,6 +435,8 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
       articlesFiltered: 0,
       articlesPipelineTriggered: 0,
       articlesPipelineFailedToStart: 0,
+      articlesPipelineJobsQueued: 0,
+      articlesPipelineQueueFailed: 0,
       message: "Ingestion skipped: another ingestion job is already running",
     };
   }
@@ -424,6 +457,8 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
     articlesFiltered,
     articlesPipelineTriggered,
     articlesPipelineFailedToStart,
+    articlesPipelineJobsQueued,
+    articlesPipelineQueueFailed,
   } = result;
 
   return {
@@ -442,7 +477,9 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
     articlesFiltered,
     articlesPipelineTriggered,
     articlesPipelineFailedToStart,
-    message: `Ingestion complete: ${articlesPipelineTriggered} pipeline(s) triggered, ${articlesFiltered} filtered, ${articlesSkippedDuplicate} duplicates skipped, ${articlesPipelineFailedToStart} pipeline start error(s) (${totalDurationMs}ms)`,
+    articlesPipelineJobsQueued,
+    articlesPipelineQueueFailed,
+    message: `Ingestion complete: ${articlesPipelineJobsQueued} pipeline job(s) queued, ${articlesFiltered} filtered, ${articlesSkippedDuplicate} duplicates skipped, ${articlesPipelineQueueFailed} queue error(s) (${totalDurationMs}ms)`,
   };
 }
 

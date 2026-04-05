@@ -104,6 +104,13 @@ vi.mock("../services/pipeline", () => ({
   }),
 }));
 
+vi.mock("../services/articlePipelineJob", () => ({
+  enqueueArticlePipelineJob: vi.fn().mockResolvedValue({ pipelineJobId: "pipeline-job-1", articleId: 42 }),
+  AlreadyQueuedError: class AlreadyQueuedError extends Error {
+    constructor(articleId: number) { super(`Pipeline job already active for article ${articleId}`); this.name = "AlreadyQueuedError"; }
+  },
+}));
+
 /** Helper: returns a Drizzle-style insert chain.
  *  The .values() result is both awaitable (for filtered inserts) and
  *  has a .returning() method (for eligible inserts). */
@@ -156,6 +163,8 @@ describe("runIngestion", () => {
     expect(stats.articlesFullyProcessed).toBe(0);
     expect(stats.articlesPipelineTriggered).toBe(0);
     expect(stats.articlesInsertedRaw).toBe(0);
+    expect(stats.articlesPipelineJobsQueued).toBe(0);
+    expect(stats.articlesPipelineQueueFailed).toBe(0);
   });
 
   it("returns richer metrics when withJob resolves with result", async () => {
@@ -181,8 +190,12 @@ describe("runIngestion", () => {
     // New metric fields present
     expect(stats.articlesInsertedRaw).toBe(0);
     expect(stats.articlesFiltered).toBe(0);
+    // Phase 4 backward-compat aliases
     expect(stats.articlesPipelineTriggered).toBe(0);
     expect(stats.articlesPipelineFailedToStart).toBe(0);
+    // Phase 5 primary fields
+    expect(stats.articlesPipelineJobsQueued).toBe(0);
+    expect(stats.articlesPipelineQueueFailed).toBe(0);
   });
 
   it("includes jobId in returned stats", async () => {
@@ -258,7 +271,7 @@ describe("runIngestion — eligible articles must go through the pipeline", () =
     expect(insertValues.processingStage).not.toBe("validated");
   });
 
-  it("invokes processArticlePipeline for eligible articles", async () => {
+  it("enqueues a pipeline job for eligible articles (not calling pipeline directly)", async () => {
     const { withJob } = await import("../services/jobService");
     (withJob as ReturnType<typeof vi.fn>).mockImplementation(
       async (_: string, __: string, fn: (jobId: string) => Promise<unknown>) => fn("job-2")
@@ -281,18 +294,23 @@ describe("runIngestion — eligible articles must go through the pipeline", () =
     (db.insert as ReturnType<typeof vi.fn>).mockReturnValue(makeDbInsertChain(99));
     (db.update as ReturnType<typeof vi.fn>).mockReturnValue(makeDbUpdateChain());
 
-    const { processArticlePipeline } = await import("../services/pipeline");
-    (processArticlePipeline as ReturnType<typeof vi.fn>).mockResolvedValue({
-      articleId: 99, jobId: "job-2", finalStage: "validated", finalStatus: "success",
-      totalDurationMs: 100, stageOutputs: [],
+    const { enqueueArticlePipelineJob } = await import("../services/articlePipelineJob");
+    (enqueueArticlePipelineJob as ReturnType<typeof vi.fn>).mockResolvedValue({
+      pipelineJobId: "pipe-abc", articleId: 99,
     });
+
+    const { processArticlePipeline } = await import("../services/pipeline");
 
     const { runIngestion } = await import("../services/ingestionService");
     const stats = await runIngestion();
 
-    expect(processArticlePipeline).toHaveBeenCalledOnce();
-    expect(processArticlePipeline).toHaveBeenCalledWith(99, "job-2", expect.anything());
-    expect(stats.articlesPipelineTriggered).toBe(1);
+    // Pipeline must NOT be called directly — job is queued instead
+    expect(processArticlePipeline).not.toHaveBeenCalled();
+    // enqueueArticlePipelineJob must be called with the article id
+    expect(enqueueArticlePipelineJob).toHaveBeenCalledOnce();
+    expect(enqueueArticlePipelineJob).toHaveBeenCalledWith(99, "job-2", expect.anything());
+    expect(stats.articlesPipelineJobsQueued).toBe(1);
+    expect(stats.articlesPipelineTriggered).toBe(1); // backward-compat alias
     expect(stats.articlesInsertedRaw).toBe(1);
     expect(stats.articlesFullyProcessed).toBe(1); // backward-compat alias
   });
@@ -320,9 +338,9 @@ describe("runIngestion — eligible articles must go through the pipeline", () =
     (db.insert as ReturnType<typeof vi.fn>).mockReturnValue(makeDbInsertChain(10));
     (db.update as ReturnType<typeof vi.fn>).mockReturnValue(makeDbUpdateChain());
 
-    const { processArticlePipeline } = await import("../services/pipeline");
-    (processArticlePipeline as ReturnType<typeof vi.fn>).mockResolvedValue({
-      articleId: 10, finalStatus: "success",
+    const { enqueueArticlePipelineJob } = await import("../services/articlePipelineJob");
+    (enqueueArticlePipelineJob as ReturnType<typeof vi.fn>).mockResolvedValue({
+      pipelineJobId: "pipe-10", articleId: 10,
     });
 
     const { runIngestion } = await import("../services/ingestionService");
@@ -362,13 +380,13 @@ describe("runIngestion — filtered articles short-circuit without pipeline", ()
     (db.insert as ReturnType<typeof vi.fn>).mockReturnValue(makeDbInsertChain());
     (db.update as ReturnType<typeof vi.fn>).mockReturnValue(makeDbUpdateChain());
 
-    const { processArticlePipeline } = await import("../services/pipeline");
+    const { enqueueArticlePipelineJob } = await import("../services/articlePipelineJob");
 
     const { runIngestion } = await import("../services/ingestionService");
     const stats = await runIngestion();
 
-    // Pipeline must NOT be invoked
-    expect(processArticlePipeline).not.toHaveBeenCalled();
+    // Pipeline job must NOT be queued for filtered articles
+    expect(enqueueArticlePipelineJob).not.toHaveBeenCalled();
     // Filtered record should be inserted
     expect(db.insert).toHaveBeenCalledTimes(1);
     const insertValues = (
@@ -379,6 +397,7 @@ describe("runIngestion — filtered articles short-circuit without pipeline", ()
     // Metric checks
     expect(stats.articlesSkippedFiltered).toBe(1);
     expect(stats.articlesFiltered).toBe(1);
+    expect(stats.articlesPipelineJobsQueued).toBe(0);
     expect(stats.articlesPipelineTriggered).toBe(0);
     expect(stats.articlesInsertedRaw).toBe(0);
   });
@@ -407,18 +426,19 @@ describe("runIngestion — filtered articles short-circuit without pipeline", ()
     (db.insert as ReturnType<typeof vi.fn>).mockReturnValue(makeDbInsertChain());
     (db.update as ReturnType<typeof vi.fn>).mockReturnValue(makeDbUpdateChain());
 
-    const { processArticlePipeline } = await import("../services/pipeline");
+    const { enqueueArticlePipelineJob } = await import("../services/articlePipelineJob");
 
     const { runIngestion } = await import("../services/ingestionService");
     const stats = await runIngestion();
 
-    expect(processArticlePipeline).not.toHaveBeenCalled();
+    expect(enqueueArticlePipelineJob).not.toHaveBeenCalled();
     const insertValues = (
       (db.insert as ReturnType<typeof vi.fn>).mock.results[0].value.values as ReturnType<typeof vi.fn>
     ).mock.calls[0][0];
     expect(insertValues.processingStage).toBe("filtered");
     expect(insertValues.processFailureReason).toBe("empty_content");
     expect(stats.articlesFiltered).toBe(1);
+    expect(stats.articlesPipelineJobsQueued).toBe(0);
     expect(stats.articlesPipelineTriggered).toBe(0);
   });
 });
@@ -428,7 +448,7 @@ describe("runIngestion — pipeline failure hardening", () => {
     vi.clearAllMocks();
   });
 
-  it("persists failure state on article when pipeline throws", async () => {
+  it("increments queue-failure metric and continues when job creation throws", async () => {
     const { withJob } = await import("../services/jobService");
     (withJob as ReturnType<typeof vi.fn>).mockImplementation(
       async (_: string, __: string, fn: (jobId: string) => Promise<unknown>) => fn("job-6")
@@ -448,32 +468,26 @@ describe("runIngestion — pipeline failure hardening", () => {
     (passesNoiseFilter as ReturnType<typeof vi.fn>).mockReturnValue(true);
 
     const { db } = await import("@workspace/db");
-    const updateChain = makeDbUpdateChain();
     (db.insert as ReturnType<typeof vi.fn>).mockReturnValue(makeDbInsertChain(77));
-    (db.update as ReturnType<typeof vi.fn>).mockReturnValue(updateChain);
+    (db.update as ReturnType<typeof vi.fn>).mockReturnValue(makeDbUpdateChain());
 
-    const { processArticlePipeline } = await import("../services/pipeline");
-    (processArticlePipeline as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error("LLM service unavailable")
+    const { enqueueArticlePipelineJob } = await import("../services/articlePipelineJob");
+    (enqueueArticlePipelineJob as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("DB connection lost")
     );
 
     const { runIngestion } = await import("../services/ingestionService");
     const stats = await runIngestion();
 
-    // Failure persisted on article
-    expect(db.update).toHaveBeenCalledOnce();
-    const setCall = (updateChain.set as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(setCall.processingStatus).toBe("failed");
-    expect(setCall.processingError).toBe("pipeline_start_failed");
-    expect(setCall.lastStageError).toContain("LLM service unavailable");
-
-    // Metrics reflect failure
-    expect(stats.articlesPipelineFailedToStart).toBe(1);
+    // Queue failure counted — article remains raw/pending (no DB update for failure state)
+    expect(db.update).not.toHaveBeenCalled();
+    expect(stats.articlesPipelineQueueFailed).toBe(1);
+    expect(stats.articlesPipelineFailedToStart).toBe(1); // backward-compat alias
     expect(stats.articlesProcessingFailed).toBe(1);
-    expect(stats.articlesPipelineTriggered).toBe(0);
+    expect(stats.articlesPipelineJobsQueued).toBe(0);
   });
 
-  it("keeps ingestion job resilient after pipeline failure (processes remaining articles)", async () => {
+  it("keeps ingestion job resilient after queue failure (processes remaining articles)", async () => {
     const { withJob } = await import("../services/jobService");
     (withJob as ReturnType<typeof vi.fn>).mockImplementation(
       async (_: string, __: string, fn: (jobId: string) => Promise<unknown>) => fn("job-7")
@@ -500,20 +514,20 @@ describe("runIngestion — pipeline failure hardening", () => {
       .mockReturnValueOnce(makeDbInsertChain(2));
     (db.update as ReturnType<typeof vi.fn>).mockReturnValue(makeDbUpdateChain());
 
-    const { processArticlePipeline } = await import("../services/pipeline");
+    const { enqueueArticlePipelineJob } = await import("../services/articlePipelineJob");
     // First call fails, second succeeds
-    (processArticlePipeline as ReturnType<typeof vi.fn>)
-      .mockRejectedValueOnce(new Error("transient error"))
-      .mockResolvedValueOnce({ articleId: 2, finalStatus: "success" });
+    (enqueueArticlePipelineJob as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(new Error("transient queue error"))
+      .mockResolvedValueOnce({ pipelineJobId: "pipe-2", articleId: 2 });
 
     const { runIngestion } = await import("../services/ingestionService");
     const stats = await runIngestion();
 
-    // Both articles inserted, one pipeline succeeded, one failed
+    // Both articles inserted, one job queued, one queue failed
     expect(db.insert).toHaveBeenCalledTimes(2);
     expect(stats.articlesInsertedRaw).toBe(2);
-    expect(stats.articlesPipelineTriggered).toBe(1);
-    expect(stats.articlesPipelineFailedToStart).toBe(1);
+    expect(stats.articlesPipelineJobsQueued).toBe(1);
+    expect(stats.articlesPipelineQueueFailed).toBe(1);
   });
 });
 
