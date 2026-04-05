@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, integer, json, real } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, integer, json, real, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -104,9 +104,23 @@ export const articlesTable = pgTable("articles", {
   // Deduplication fingerprints (Phase 1)
   // sha256 hex of normalised title (lowercased, stripped punctuation/whitespace)
   titleFingerprint: text("title_fingerprint"),
-  // sha256 hex of first 1 000 chars of normalised content
+  // sha256 hex of first 1,000 chars of normalised content
   contentFingerprint: text("content_fingerprint"),
-});
+
+  // Minimal article-level processing visibility (Phase 1b)
+  // Lightweight status field so failures are less opaque before full stage-based processing.
+  // Values: "pending" | "processing" | "processed" | "failed" | "filtered"
+  processingStatus: text("processing_status"),
+  // Human-readable error message for the most-recent processing failure.
+  processingError: text("processing_error"),
+  // Timestamp of the most-recent processing attempt (success or failure).
+  lastProcessedAt: timestamp("last_processed_at", { withTimezone: true }),
+},
+(t) => [
+  // Fingerprint indexes for fast deduplication lookups
+  index("articles_title_fingerprint_idx").on(t.titleFingerprint),
+  index("articles_content_fingerprint_idx").on(t.contentFingerprint),
+]);
 
 export const insertArticleSchema = createInsertSchema(articlesTable).omit({
   id: true,

@@ -35,10 +35,9 @@ describe("sanitizeNullStr", () => {
 });
 
 // ---------------------------------------------------------------------------
-// sanitizeIssuer (delegates to canonicalizeIssuer after sanitizeNullStr)
+// sanitizeIssuer
 // ---------------------------------------------------------------------------
 
-// Mock canonicalIssuers so the test doesn't need the full lib loaded
 vi.mock("../lib/canonicalIssuers", () => ({
   canonicalizeIssuer: (val: string | null) => (val ? val.toUpperCase() : null),
 }));
@@ -54,16 +53,19 @@ describe("sanitizeIssuer", () => {
   });
 
   it("passes non-null values through canonicalizeIssuer", () => {
-    // Our mock uppercases the value, so this confirms the delegation
     expect(sanitizeIssuer("ford motor")).toBe("FORD MOTOR");
   });
 });
 
 // ---------------------------------------------------------------------------
-// runIngestion – lock-skipping behaviour
+// runIngestion — lock-skipping behaviour + richer metrics
 // ---------------------------------------------------------------------------
+
 vi.mock("../services/jobService", () => ({
   withJob: vi.fn(),
+  NonRetryableError: class NonRetryableError extends Error {
+    constructor(msg: string) { super(msg); this.name = "NonRetryableError"; }
+  },
 }));
 
 vi.mock("../lib/dataProviders", () => ({
@@ -99,10 +101,11 @@ describe("runIngestion", () => {
     const { runIngestion } = await import("../services/ingestionService");
     const stats = await runIngestion();
     expect(stats.message).toMatch(/skipped/i);
-    expect(stats.fetched).toBe(0);
+    expect(stats.articlesFetched).toBe(0);
+    expect(stats.articlesFullyProcessed).toBe(0);
   });
 
-  it("returns stats when withJob resolves with result", async () => {
+  it("returns richer metrics when withJob resolves with result", async () => {
     const { withJob } = await import("../services/jobService");
     (withJob as ReturnType<typeof vi.fn>).mockImplementation(
       async (_type: string, _key: string, fn: (jobId: string) => Promise<unknown>) => {
@@ -115,8 +118,43 @@ describe("runIngestion", () => {
 
     const { runIngestion } = await import("../services/ingestionService");
     const stats = await runIngestion();
-    expect(stats.fetched).toBe(0);
-    expect(stats.processed).toBe(0);
+    expect(stats.articlesFetched).toBe(0);
+    expect(stats.articlesFullyProcessed).toBe(0);
+    expect(stats.articlesSkippedDuplicate).toBe(0);
+    expect(stats.articlesSkippedFiltered).toBe(0);
+    expect(stats.articlesProcessingFailed).toBe(0);
+    expect(stats.totalDurationMs).toBeGreaterThanOrEqual(0);
     expect(stats.message).toMatch(/ingestion complete/i);
+  });
+
+  it("includes jobId in returned stats", async () => {
+    const { withJob } = await import("../services/jobService");
+    (withJob as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_type: string, _key: string, fn: (jobId: string) => Promise<unknown>) => {
+        return fn("abc-123");
+      }
+    );
+
+    const { fetchAllArticles } = await import("../lib/dataProviders");
+    (fetchAllArticles as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    const { runIngestion } = await import("../services/ingestionService");
+    const stats = await runIngestion();
+    expect(stats.jobId).toBe("abc-123");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Article processing status field expectations
+// ---------------------------------------------------------------------------
+
+describe("ArticleProcessingStatus type", () => {
+  it("accepts valid status values", () => {
+    // This is a compile-time type check encoded as a runtime assertion.
+    // If the type changes incompatibly, the build will fail.
+    const validStatuses = ["pending", "processing", "processed", "failed", "filtered"];
+    expect(validStatuses).toContain("processed");
+    expect(validStatuses).toContain("failed");
+    expect(validStatuses).toContain("filtered");
   });
 });

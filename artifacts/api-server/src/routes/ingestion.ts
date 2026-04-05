@@ -9,15 +9,26 @@ router.post("/refresh", async (req, res): Promise<void> => {
   req.log.info("Starting data ingestion");
   try {
     const stats = await runIngestion({ log: req.log });
-    res.json(
-      TriggerRefreshResponse.parse({
-        fetched: stats.fetched,
-        processed: stats.processed,
-        duplicatesSkipped: stats.duplicatesSkipped,
-        errors: stats.errors,
+    // TriggerRefreshResponse keeps backward-compat field names; we extend the
+    // response with the richer Phase 1b metrics as additional properties.
+    res.json({
+      ...TriggerRefreshResponse.parse({
+        fetched: stats.articlesFetched,
+        processed: stats.articlesFullyProcessed,
+        duplicatesSkipped: stats.articlesSkippedDuplicate,
+        errors: stats.articlesProcessingFailed,
         message: stats.message,
-      })
-    );
+      }),
+      jobId: stats.jobId,
+      metrics: {
+        feedsChecked: stats.feedsChecked,
+        feedsSucceeded: stats.feedsSucceeded,
+        feedsFailed: stats.feedsFailed,
+        articlesInserted: stats.articlesInserted,
+        articlesSkippedFiltered: stats.articlesSkippedFiltered,
+        totalDurationMs: stats.totalDurationMs,
+      },
+    });
   } catch (err) {
     logger.error({ err }, "Ingestion failed");
     res.status(500).json({ error: "Ingestion failed" });

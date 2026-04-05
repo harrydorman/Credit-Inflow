@@ -1,13 +1,14 @@
 /**
  * ingestionService.ts
  *
- * Service layer for the ingestion pipeline. This module owns all business
- * logic previously embedded in the /refresh and /refresh/backfill route
- * handlers so that route handlers remain thin.
+ * Service layer for the ingestion pipeline.  Route handlers delegate here
+ * so they remain thin.
  *
- * Public API:
- *  - runIngestion(opts)   – fetches, deduplicates, enriches, analyses & persists new articles
- *  - runBackfill(opts)    – backfills structured AI outputs and retries unprocessed articles
+ * Phase 1b additions:
+ *  - Richer structured metrics per job run
+ *  - Article-level processingStatus / processingError / lastProcessedAt
+ *  - jobId surfaced in stats so callers can correlate logs
+ *  - Uses updated withJob / NonRetryableError from jobService
  */
 import { and, isNull, isNotNull, eq } from "drizzle-orm";
 import { db, articlesTable } from "@workspace/db";
@@ -29,7 +30,7 @@ import {
 import { withJob } from "./jobService";
 
 // ---------------------------------------------------------------------------
-// Shared sanitise helpers (previously in the route file)
+// Shared sanitise helpers
 // ---------------------------------------------------------------------------
 
 export function sanitizeNullStr(val: string | null | undefined): string | null {
@@ -51,17 +52,45 @@ export function sanitizeIssuer(val: string | null | undefined): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Ingestion result types
+// Article processing status
 // ---------------------------------------------------------------------------
 
-export interface IngestionStats {
+export type ArticleProcessingStatus =
+  | "pending"
+  | "processing"
+  | "processed"
+  | "failed"
+  | "filtered";
+
+// ---------------------------------------------------------------------------
+// Ingestion result types (Phase 1b: richer metrics)
+// ---------------------------------------------------------------------------
+
+export interface IngestionMetrics {
+  /** Number of RSS/API feeds checked. */
+  feedsChecked: number;
+  /** Feeds that returned at least one article. */
+  feedsSucceeded: number;
+  /** Feeds that threw errors during fetch. */
+  feedsFailed: number;
+  /** Total raw articles returned from all providers. */
+  articlesFetched: number;
+  /** Articles actually written to the DB. */
+  articlesInserted: number;
+  /** Articles skipped because URL or fingerprint already existed. */
+  articlesSkippedDuplicate: number;
+  /** Articles skipped due to noise / empty-content filter. */
+  articlesSkippedFiltered: number;
+  /** Articles where AI processing or DB write failed. */
+  articlesProcessingFailed: number;
+  /** Articles with successful AI analysis + market validation. */
+  articlesFullyProcessed: number;
+  /** Wall-clock duration in ms. */
+  totalDurationMs: number;
+}
+
+export interface IngestionStats extends IngestionMetrics {
   jobId: string | null;
-  fetched: number;
-  processed: number;
-  duplicatesSkipped: number;
-  noiseFiltered: number;
-  errors: number;
-  marketValidated: number;
   message: string;
 }
 
@@ -72,6 +101,7 @@ export interface BackfillStats {
   skippedNoiseFilter: number;
   aiNullReturned: number;
   errors: number;
+  totalDurationMs: number;
   message: string;
 }
 
@@ -91,7 +121,7 @@ export interface BackfillOptions {
   scopeKey?: string;
   /** Max articles to backfill for structured outputs (Phase 1). Default 30. */
   structuredLimit?: number;
-  /** Max unprocessed articles to retry (Phase 2). Default 20. */
+  /** Max unprocessed articles to retry. Default 20. */
   unprocessedLimit?: number;
 }
 
@@ -102,17 +132,24 @@ export interface BackfillOptions {
 export async function runIngestion(opts: IngestionOptions = {}): Promise<IngestionStats> {
   const log = opts.log ?? rootLogger;
   const scopeKey = opts.scopeKey ?? "global";
+  const startTime = Date.now();
 
   const result = await withJob("ingestion", scopeKey, async (jobId) => {
     const jobLog = log.child({ jobId });
     jobLog.info("Ingestion service: starting");
 
-    let fetched = 0;
-    let processed = 0;
-    let duplicatesSkipped = 0;
-    let noiseFiltered = 0;
-    let errors = 0;
-    let marketValidated = 0;
+    const metrics: IngestionMetrics = {
+      feedsChecked: 0,
+      feedsSucceeded: 0,
+      feedsFailed: 0,
+      articlesFetched: 0,
+      articlesInserted: 0,
+      articlesSkippedDuplicate: 0,
+      articlesSkippedFiltered: 0,
+      articlesProcessingFailed: 0,
+      articlesFullyProcessed: 0,
+      totalDurationMs: 0,
+    };
 
     const etfSnapshot = await getETFSnapshot();
     jobLog.info(
@@ -123,14 +160,23 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
       "ETF snapshot ready"
     );
 
-    const allRaw = await fetchAllArticles();
-    fetched = allRaw.length;
-    jobLog.info({ fetched }, "Fetched raw articles from all providers");
+    let allRaw: Awaited<ReturnType<typeof fetchAllArticles>> = [];
+    try {
+      allRaw = await fetchAllArticles();
+      metrics.feedsSucceeded = 1; // fetchAllArticles aggregates all providers
+    } catch (err) {
+      metrics.feedsFailed = 1;
+      jobLog.error({ err }, "Failed to fetch articles from providers");
+      // Non-fatal at the job level — return partial metrics
+    }
+    metrics.feedsChecked = 1;
+    metrics.articlesFetched = allRaw.length;
+    jobLog.info({ articlesFetched: allRaw.length }, "Fetched raw articles from all providers");
 
     // Fast URL pre-filter (existing behaviour)
     const knownUrls = await existingUrlSet();
     const urlFiltered = allRaw.filter((a) => !knownUrls.has(a.url));
-    duplicatesSkipped = allRaw.length - urlFiltered.length;
+    metrics.articlesSkippedDuplicate = allRaw.length - urlFiltered.length;
 
     for (const raw of urlFiltered) {
       try {
@@ -146,7 +192,7 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
         });
 
         if (alreadyExists) {
-          duplicatesSkipped++;
+          metrics.articlesSkippedDuplicate++;
           jobLog.debug(
             { url: raw.url, title: raw.title.slice(0, 70) },
             "Fingerprint duplicate — skipping"
@@ -189,8 +235,10 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
           }
         }
 
+        const now = new Date();
+
         if (!hasContent) {
-          noiseFiltered++;
+          metrics.articlesSkippedFiltered++;
           jobLog.info(
             { title: raw.title.slice(0, 70), source: raw.source },
             "Empty content: skipping AI processing"
@@ -208,14 +256,18 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
             processedAt: null,
             titleFingerprint: titleFp,
             contentFingerprint: enrichedContentFp,
+            processingStatus: "filtered" satisfies ArticleProcessingStatus,
+            processingError: "empty_content",
+            lastProcessedAt: now,
           });
+          metrics.articlesInserted++;
           continue;
         }
 
         const noisePass = passesNoiseFilter(raw.title, enriched.rawContent);
         const titleOverride = !noisePass && isCreditTitleOverride(raw.title);
         if (!noisePass && !titleOverride) {
-          noiseFiltered++;
+          metrics.articlesSkippedFiltered++;
           jobLog.info(
             { title: raw.title.slice(0, 70), source: raw.source },
             "Noise-filtered: skipping AI processing (score < threshold)"
@@ -233,7 +285,11 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
             processedAt: null,
             titleFingerprint: titleFp,
             contentFingerprint: enrichedContentFp,
+            processingStatus: "filtered" satisfies ArticleProcessingStatus,
+            processingError: "noise_filtered",
+            lastProcessedAt: now,
           });
+          metrics.articlesInserted++;
           continue;
         }
         if (titleOverride) {
@@ -254,7 +310,6 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
             creditSignalScore: analysis.creditSignalScore ?? null,
             etfSnapshot,
           });
-          marketValidated++;
         }
 
         if (!analysis) {
@@ -264,6 +319,7 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
           );
         }
 
+        const insertNow = new Date();
         const [persisted] = await db
           .insert(articlesTable)
           .values({
@@ -278,6 +334,10 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
             processFailureReason: analysis ? null : "ai_null",
             titleFingerprint: titleFp,
             contentFingerprint: enrichedContentFp,
+
+            processingStatus: (analysis ? "processed" : "failed") satisfies ArticleProcessingStatus,
+            processingError: analysis ? null : "ai_null",
+            lastProcessedAt: insertNow,
 
             summary: sanitizeNullStr(analysis?.summary),
             sector: sanitizeNullStr(analysis?.sector),
@@ -334,7 +394,7 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
             creditSummaryJson: analysis?.creditSummary ?? null,
             scoreExplanationJson: analysis?.scoreExplanation ?? null,
 
-            processedAt: analysis ? new Date() : null,
+            processedAt: analysis ? insertNow : null,
           })
           .returning({
             id: articlesTable.id,
@@ -344,7 +404,8 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
             covenantFlag: articlesTable.covenantFlag,
           });
 
-        if (analysis) processed++;
+        metrics.articlesInserted++;
+        if (analysis) metrics.articlesFullyProcessed++;
 
         if (analysis && persisted?.issuerName) {
           const alertCount = await evaluateAlerts({
@@ -362,40 +423,61 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
 
         await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (err) {
-        rootLogger.error({ err, url: raw.url }, "Error processing article");
-        errors++;
+        jobLog.error({ err, url: raw.url }, "Error processing article");
+        metrics.articlesProcessingFailed++;
       }
     }
 
-    const stats = { fetched, processed, duplicatesSkipped, noiseFiltered, marketValidated, errors };
-    jobLog.info(stats, "Ingestion complete");
-    return stats;
+    metrics.totalDurationMs = Date.now() - startTime;
+    jobLog.info(metrics, "Ingestion complete");
+    return { jobId, ...metrics };
   });
 
   if (!result) {
     // Lock not acquired — another job is running
     return {
       jobId: null,
-      fetched: 0,
-      processed: 0,
-      duplicatesSkipped: 0,
-      noiseFiltered: 0,
-      errors: 0,
-      marketValidated: 0,
+      feedsChecked: 0,
+      feedsSucceeded: 0,
+      feedsFailed: 0,
+      articlesFetched: 0,
+      articlesInserted: 0,
+      articlesSkippedDuplicate: 0,
+      articlesSkippedFiltered: 0,
+      articlesProcessingFailed: 0,
+      articlesFullyProcessed: 0,
+      totalDurationMs: Date.now() - startTime,
       message: "Ingestion skipped: another ingestion job is already running",
     };
   }
 
-  const { fetched, processed, duplicatesSkipped, noiseFiltered, marketValidated, errors } = result;
+  const {
+    jobId,
+    articlesFetched,
+    articlesFullyProcessed,
+    articlesSkippedDuplicate,
+    articlesSkippedFiltered,
+    articlesProcessingFailed,
+    totalDurationMs,
+    feedsChecked,
+    feedsSucceeded,
+    feedsFailed,
+    articlesInserted,
+  } = result;
+
   return {
-    jobId: null, // jobId returned by withJob is not re-surfaced here; use job table for lookup
-    fetched,
-    processed,
-    duplicatesSkipped,
-    noiseFiltered,
-    errors,
-    marketValidated,
-    message: `Ingestion complete: ${processed} new articles processed (${marketValidated} market-validated), ${noiseFiltered} noise-filtered, ${duplicatesSkipped} duplicates skipped`,
+    jobId,
+    feedsChecked,
+    feedsSucceeded,
+    feedsFailed,
+    articlesFetched,
+    articlesInserted,
+    articlesSkippedDuplicate,
+    articlesSkippedFiltered,
+    articlesProcessingFailed,
+    articlesFullyProcessed,
+    totalDurationMs,
+    message: `Ingestion complete: ${articlesFullyProcessed} articles fully processed, ${articlesSkippedDuplicate} duplicates skipped, ${articlesSkippedFiltered} filtered, ${articlesProcessingFailed} errors (${totalDurationMs}ms)`,
   };
 }
 
@@ -408,6 +490,7 @@ export async function runBackfill(opts: BackfillOptions = {}): Promise<BackfillS
   const scopeKey = opts.scopeKey ?? "global";
   const structuredLimit = opts.structuredLimit ?? 30;
   const unprocessedLimit = opts.unprocessedLimit ?? 20;
+  const startTime = Date.now();
 
   const result = await withJob("backfill", scopeKey, async (jobId) => {
     const jobLog = log.child({ jobId });
@@ -444,11 +527,13 @@ export async function runBackfill(opts: BackfillOptions = {}): Promise<BackfillS
           continue;
         }
 
+        const now = new Date();
         await db
           .update(articlesTable)
           .set({
             creditSummaryJson: analysis.creditSummary ?? null,
             scoreExplanationJson: analysis.scoreExplanation ?? null,
+            lastProcessedAt: now,
           })
           .where(eq(articlesTable.id, article.id));
 
@@ -503,6 +588,7 @@ export async function runBackfill(opts: BackfillOptions = {}): Promise<BackfillS
           continue;
         }
 
+        const now = new Date();
         await db
           .update(articlesTable)
           .set({
@@ -545,7 +631,10 @@ export async function runBackfill(opts: BackfillOptions = {}): Promise<BackfillS
             distressedRisk: analysis.distressedRisk,
             creditSummaryJson: analysis.creditSummary ?? null,
             scoreExplanationJson: analysis.scoreExplanation ?? null,
-            processedAt: new Date(),
+            processedAt: now,
+            processingStatus: "processed" satisfies ArticleProcessingStatus,
+            processingError: null,
+            lastProcessedAt: now,
           })
           .where(eq(articlesTable.id, article.id));
 
@@ -561,7 +650,8 @@ export async function runBackfill(opts: BackfillOptions = {}): Promise<BackfillS
       }
     }
 
-    return { backfilledStructured, retriedUnprocessed, skippedNoiseFilter, aiNullReturned, errors };
+    const totalDurationMs = Date.now() - startTime;
+    return { jobId, backfilledStructured, retriedUnprocessed, skippedNoiseFilter, aiNullReturned, errors, totalDurationMs };
   });
 
   if (!result) {
@@ -572,18 +662,20 @@ export async function runBackfill(opts: BackfillOptions = {}): Promise<BackfillS
       skippedNoiseFilter: 0,
       aiNullReturned: 0,
       errors: 0,
+      totalDurationMs: Date.now() - startTime,
       message: "Backfill skipped: another backfill job is already running",
     };
   }
 
-  const { backfilledStructured, retriedUnprocessed, skippedNoiseFilter, aiNullReturned, errors } = result;
+  const { jobId, backfilledStructured, retriedUnprocessed, skippedNoiseFilter, aiNullReturned, errors, totalDurationMs } = result;
   return {
-    jobId: null,
+    jobId,
     backfilledStructured,
     retriedUnprocessed,
     skippedNoiseFilter,
     aiNullReturned,
     errors,
-    message: `Backfill complete: ${backfilledStructured} structured outputs updated, ${retriedUnprocessed} unprocessed articles processed, ${skippedNoiseFilter} noise-filtered (legitimately skipped), ${aiNullReturned} AI null returns, ${errors} errors`,
+    totalDurationMs,
+    message: `Backfill complete: ${backfilledStructured} structured outputs updated, ${retriedUnprocessed} unprocessed articles processed, ${skippedNoiseFilter} noise-filtered (legitimately skipped), ${aiNullReturned} AI null returns, ${errors} errors (${totalDurationMs}ms)`,
   };
 }
