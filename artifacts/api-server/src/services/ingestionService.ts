@@ -58,7 +58,8 @@ export function sanitizeIssuer(val: string | null | undefined): string | null {
 export type ArticleProcessingStatus =
   | "pending"
   | "processing"
-  | "processed"
+  | "processed" // legacy Phase 1b value — kept for backward compatibility
+  | "success"   // Phase 2 pipeline success
   | "failed"
   | "filtered";
 
@@ -258,6 +259,7 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
             contentFingerprint: enrichedContentFp,
             processingStatus: "filtered" satisfies ArticleProcessingStatus,
             processingError: "empty_content",
+            processingStage: "filtered",
             lastProcessedAt: now,
           });
           metrics.articlesInserted++;
@@ -287,6 +289,7 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
             contentFingerprint: enrichedContentFp,
             processingStatus: "filtered" satisfies ArticleProcessingStatus,
             processingError: "noise_filtered",
+            processingStage: "filtered",
             lastProcessedAt: now,
           });
           metrics.articlesInserted++;
@@ -337,6 +340,7 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
 
             processingStatus: (analysis ? "processed" : "failed") satisfies ArticleProcessingStatus,
             processingError: analysis ? null : "ai_null",
+            processingStage: analysis ? "validated" : "raw",
             lastProcessedAt: insertNow,
 
             summary: sanitizeNullStr(analysis?.summary),

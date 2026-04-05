@@ -108,13 +108,40 @@ export const articlesTable = pgTable("articles", {
   contentFingerprint: text("content_fingerprint"),
 
   // Minimal article-level processing visibility (Phase 1b)
-  // Lightweight status field so failures are less opaque before full stage-based processing.
-  // Values: "pending" | "processing" | "processed" | "failed" | "filtered"
+  // Values: "pending" | "processing" | "processed" | "success" | "failed" | "filtered"
+  // "processed" is kept for backward compatibility; new pipeline uses "success".
   processingStatus: text("processing_status"),
   // Human-readable error message for the most-recent processing failure.
   processingError: text("processing_error"),
   // Timestamp of the most-recent processing attempt (success or failure).
   lastProcessedAt: timestamp("last_processed_at", { withTimezone: true }),
+
+  // ── Phase 2: Stage-based pipeline ─────────────────────────────────────────
+  // Current stage the article has reached in the processing pipeline.
+  // Values: "raw" | "filtered" | "enriched" | "issuer_identified" | "classified" | "scored" | "validated"
+  processingStage: text("processing_stage"),
+  // When the current pipeline run began for this article.
+  processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
+  // When the current pipeline run completed (null if still in progress or failed).
+  processingCompletedAt: timestamp("processing_completed_at", { withTimezone: true }),
+
+  // ── AI traceability ────────────────────────────────────────────────────────
+  // Versions stored so that output changes can be attributed to prompt / model / pipeline changes.
+  promptVersion: text("prompt_version"),
+  modelVersion: text("model_version"),
+  pipelineVersion: text("pipeline_version"),
+
+  // ── Quality + trust ────────────────────────────────────────────────────────
+  // Float 0.0 – 1.0: combined confidence from LLM output, rule matches, issuer resolution.
+  classificationConfidence: real("classification_confidence"),
+  // True when confidence is below threshold or signals are conflicting / incomplete.
+  needsReview: boolean("needs_review").notNull().default(false),
+  // Human-readable reason explaining why review is needed.
+  reviewReason: text("review_reason"),
+
+  // ── Explainability ────────────────────────────────────────────────────────
+  // Structured JSON recording rule overrides, per-stage outputs, and timing.
+  processingMetadata: json("processing_metadata").$type<Record<string, unknown>>(),
 },
 (t) => [
   // Fingerprint indexes for fast deduplication lookups
