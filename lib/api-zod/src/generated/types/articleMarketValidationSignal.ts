@@ -10,11 +10,12 @@
  * confirmed: news + market aligned; mixed: divergence; unconfirmed: no market data
  * @nullable
  */
-export type ArticleMarketValidationSignal = typeof ArticleMarketValidationSignal[keyof typeof ArticleMarketValidationSignal] | null;
-
+export type ArticleMarketValidationSignal =
+  | (typeof ArticleMarketValidationSignal)[keyof typeof ArticleMarketValidationSignal]
+  | null;
 
 export const ArticleMarketValidationSignal = {
-  confirmed: 'confirmed',
-  mixed: 'mixed',
-  unconfirmed: 'unconfirmed',
+  confirmed: "confirmed",
+  mixed: "mixed",
+  unconfirmed: "unconfirmed",
 } as const;

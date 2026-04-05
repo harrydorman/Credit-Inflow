@@ -5,12 +5,12 @@
  * Credit Intelligence Dashboard API — Real-time credit risk detection and trade signal platform
  * OpenAPI spec version: 0.3.0
  */
-import type { MarketOverviewArticleCounts } from './marketOverviewArticleCounts';
-import type { MarketOverviewMacro } from './marketOverviewMacro';
-import type { MarketOverviewRiskSummary } from './marketOverviewRiskSummary';
-import type { MarketOverviewSectorSignalsItem } from './marketOverviewSectorSignalsItem';
-import type { MarketOverviewTopRisksItem } from './marketOverviewTopRisksItem';
-import type { MarketOverviewTrendHighlightsItem } from './marketOverviewTrendHighlightsItem';
+import type { MarketOverviewArticleCounts } from "./marketOverviewArticleCounts";
+import type { MarketOverviewMacro } from "./marketOverviewMacro";
+import type { MarketOverviewRiskSummary } from "./marketOverviewRiskSummary";
+import type { MarketOverviewSectorSignalsItem } from "./marketOverviewSectorSignalsItem";
+import type { MarketOverviewTopRisksItem } from "./marketOverviewTopRisksItem";
+import type { MarketOverviewTrendHighlightsItem } from "./marketOverviewTrendHighlightsItem";
 
 export interface MarketOverview {
   macro: MarketOverviewMacro;

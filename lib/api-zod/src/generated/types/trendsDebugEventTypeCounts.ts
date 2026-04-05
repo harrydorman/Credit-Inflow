@@ -6,4 +6,4 @@
  * OpenAPI spec version: 0.3.0
  */
 
-export type TrendsDebugEventTypeCounts = {[key: string]: number};
+export type TrendsDebugEventTypeCounts = { [key: string]: number };

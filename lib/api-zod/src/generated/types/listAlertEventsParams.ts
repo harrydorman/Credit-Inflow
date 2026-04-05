@@ -7,8 +7,8 @@
  */
 
 export type ListAlertEventsParams = {
-watchlistId?: number;
-isRead?: boolean;
-limit?: number;
-offset?: number;
+  watchlistId?: number;
+  isRead?: boolean;
+  limit?: number;
+  offset?: number;
 };

@@ -10,11 +10,12 @@
  * Combined AI signal strength + market confirmation
  * @nullable
  */
-export type ArticleConfidenceScore = typeof ArticleConfidenceScore[keyof typeof ArticleConfidenceScore] | null;
-
+export type ArticleConfidenceScore =
+  | (typeof ArticleConfidenceScore)[keyof typeof ArticleConfidenceScore]
+  | null;
 
 export const ArticleConfidenceScore = {
-  high: 'high',
-  medium: 'medium',
-  low: 'low',
+  high: "high",
+  medium: "medium",
+  low: "low",
 } as const;

@@ -7,13 +7,13 @@
  */
 
 export type ListArticlesParams = {
-sector?: string;
-eventType?: string;
-sentiment?: string;
-issuerName?: string;
-covenantFlag?: boolean;
-marketImpact?: string;
-minUrgency?: number;
-limit?: number;
-offset?: number;
+  sector?: string;
+  eventType?: string;
+  sentiment?: string;
+  issuerName?: string;
+  covenantFlag?: boolean;
+  marketImpact?: string;
+  minUrgency?: number;
+  limit?: number;
+  offset?: number;
 };

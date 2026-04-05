@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.3.0
  */
 
-export type MarketOverviewRiskSummaryOverallCondition = typeof MarketOverviewRiskSummaryOverallCondition[keyof typeof MarketOverviewRiskSummaryOverallCondition];
-
+export type MarketOverviewRiskSummaryOverallCondition =
+  (typeof MarketOverviewRiskSummaryOverallCondition)[keyof typeof MarketOverviewRiskSummaryOverallCondition];
 
 export const MarketOverviewRiskSummaryOverallCondition = {
-  stable: 'stable',
-  deteriorating: 'deteriorating',
+  stable: "stable",
+  deteriorating: "deteriorating",
 } as const;
