@@ -26,7 +26,7 @@ export type ProcessingStage =
   | "scored"
   | "validated";
 
-/** Ordered sequence of non-terminal stages (skipping "filtered"). */
+/** Ordered sequence of non-terminal, non-raw stages (the progression through the pipeline). */
 export const STAGE_ORDER: readonly ProcessingStage[] = [
   "enriched",
   "issuer_identified",
@@ -34,6 +34,25 @@ export const STAGE_ORDER: readonly ProcessingStage[] = [
   "scored",
   "validated",
 ] as const;
+
+/**
+ * Returns the next stage after `current` in the pipeline, or null if `current`
+ * is the final stage or a terminal stage (raw / filtered).
+ *
+ * Used by the pipeline runner to implement partial resume.
+ */
+export function getNextStage(current: ProcessingStage): ProcessingStage | null {
+  const idx = STAGE_ORDER.indexOf(current);
+  if (idx === -1) return STAGE_ORDER[0] ?? null; // "raw" or "filtered" → start from enriched
+  return STAGE_ORDER[idx + 1] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Per-stage retry policy
+// ---------------------------------------------------------------------------
+
+/** Maximum number of retry attempts per individual stage before permanent failure. */
+export const STAGE_RETRY_MAX = 3;
 
 // ---------------------------------------------------------------------------
 // Processing status enum
@@ -96,7 +115,17 @@ export interface EnrichmentData {
 
 export interface IssuerData {
   issuerName: string | null;
-  source: "ai" | "rule" | "none";
+  source: "ai" | "rule" | "heuristic" | "none";
+  /** "early" = heuristic pass before classification; "refined" = AI-assisted pass after classification. */
+  mode: "early" | "refined";
+}
+
+/** Issuer tracking across both extraction passes (stored in processingMetadata). */
+export interface IssuerTracking {
+  initialGuess: string | null;
+  initialGuessSource: "heuristic" | "none";
+  final: string | null;
+  finalSource: "ai" | "heuristic" | "none";
 }
 
 export interface ClassificationData {
@@ -117,6 +146,12 @@ export interface ScoringData {
   classificationConfidence: number;
   needsReview: boolean;
   reviewReason: string | null;
+  confidenceBreakdown: {
+    llmComponent: number;
+    rulesComponent: number;
+    completenessComponent: number;
+    marketComponent: number;
+  };
 }
 
 export interface MarketValidationData {
@@ -125,6 +160,34 @@ export interface MarketValidationData {
   hyETFMove: number | null;
   validationSignal: "confirmed" | "mixed" | "unconfirmed";
   confidenceScore: "high" | "medium" | "low";
+}
+
+// ---------------------------------------------------------------------------
+// Standardized processingMetadata shape
+// ---------------------------------------------------------------------------
+
+/**
+ * Canonical shape for the processingMetadata JSON column.
+ *
+ * This structure is enforced by the pipeline runner. Old runs may have a
+ * subset of these fields; consumers should treat all fields as optional.
+ */
+export interface ProcessingMetadata {
+  pipelineVersion: string;
+  ruleSetVersion: string;
+  confidenceVersion: string;
+  stageOutputs: StageOutput[];
+  confidenceBreakdown?: {
+    llmComponent: number;
+    rulesComponent: number;
+    completenessComponent: number;
+    marketComponent: number;
+  };
+  issuerTracking?: IssuerTracking;
+  /** The stage at which the pipeline failed, if applicable. */
+  failedAtStage?: ProcessingStage;
+  /** Matched rule names for auditing. */
+  rulesMatched?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +203,8 @@ export interface PipelineResult {
   stageOutputs: StageOutput[];
   classificationConfidence?: number;
   needsReview?: boolean;
+  /** True when the pipeline was resumed from a previous partial run. */
+  resumed?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -156,4 +221,6 @@ export interface PipelineArticleInput {
   rawSnippet: string | null;
   // May already be present from a prior run
   processingStage: ProcessingStage | null;
+  processingStatus: string | null;
+  stageRetryCounts: Record<string, number> | null;
 }

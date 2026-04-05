@@ -142,6 +142,12 @@ export const articlesTable = pgTable("articles", {
   // ── Explainability ────────────────────────────────────────────────────────
   // Structured JSON recording rule overrides, per-stage outputs, and timing.
   processingMetadata: json("processing_metadata").$type<Record<string, unknown>>(),
+
+  // ── Phase 2.5: Per-stage retry tracking ───────────────────────────────────
+  // JSON map of stageName → retry attempt count, e.g. { "classified": 2 }.
+  stageRetryCounts: json("stage_retry_counts").$type<Record<string, number>>(),
+  // Human-readable message from the most-recent stage-level failure.
+  lastStageError: text("last_stage_error"),
 },
 (t) => [
   // Fingerprint indexes for fast deduplication lookups

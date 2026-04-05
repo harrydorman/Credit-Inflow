@@ -5,14 +5,26 @@
  *
  * processArticlePipeline(articleId, jobId):
  *   1. Loads the article from the DB
- *   2. Sets processingStatus = "processing" + processingStartedAt
+ *   2. Detects whether a prior partial run exists and resumes from the next stage
  *   3. Executes stages in sequence, persisting DB updates after each step
- *   4. On per-stage failure: marks failed/filtered, stops pipeline
+ *   4. On per-stage failure: increments stage retry count; when max retries
+ *      reached marks article permanently failed; otherwise marks failed for retry
  *   5. On success: marks processingStatus = "success", processingCompletedAt
  *
- * Each stage runs independently — a failure stops subsequent stages but
- * does NOT roll back earlier persisted updates (partial completion is
- * intentional and recoverable via backfill or re-run).
+ * Stage order (Phase 2.5):
+ *   eligibility → enrichment → early_issuer_guess → classification
+ *   → issuer_refinement → scoring → market_validation
+ *
+ * Resume logic:
+ *   - If processingStage is already set and processingStatus is "failed" or
+ *     "processing", the runner skips already-completed stages and resumes
+ *     from the next stage after the last successfully persisted one.
+ *   - Earlier stage data (enriched content, etc.) is re-loaded from the DB
+ *     row so the resume path is data-consistent.
+ *
+ * Idempotency:
+ *   Running the pipeline twice on the same article is safe. A fresh run
+ *   overwrites prior stage data for stages that are re-run.
  */
 import { eq } from "drizzle-orm";
 import { db, articlesTable } from "@workspace/db";
@@ -21,6 +33,7 @@ import type { Logger } from "pino";
 import {
   processEligibility,
   processEnrichment,
+  extractIssuerHeuristic,
   extractIssuer,
   classifyEvent,
   scoreSignal,
@@ -30,15 +43,18 @@ import {
 import type {
   PipelineResult,
   ProcessingStage,
+  ProcessingMetadata,
   StageOutput,
   EligibilityData,
   EnrichmentData,
   IssuerData,
+  IssuerTracking,
   ClassificationData,
   ScoringData,
   MarketValidationData,
 } from "./types";
-import { PIPELINE_VERSION, PROMPT_VERSION, MODEL_VERSION } from "./traceability";
+import { STAGE_ORDER, getNextStage, STAGE_RETRY_MAX } from "./types";
+import { PIPELINE_VERSION, PROMPT_VERSION, MODEL_VERSION, RULE_SET_VERSION, CONFIDENCE_VERSION } from "./traceability";
 import { sanitizeNullStr } from "../ingestionService";
 
 // ---------------------------------------------------------------------------
@@ -47,11 +63,6 @@ import { sanitizeNullStr } from "../ingestionService";
 
 /**
  * Processes a single article through the full stage pipeline.
- *
- * Designed to be called:
- *  - During ingestion (inline, right after DB insert)
- *  - By a backfill job (on articles stuck at "raw" or "failed")
- *  - For re-processing (idempotent: later pipeline runs overwrite earlier data)
  *
  * @param articleId  Database primary key of the article.
  * @param jobId      Parent job ID (for log correlation).
@@ -76,6 +87,8 @@ export async function processArticlePipeline(
       rawContent: articlesTable.rawContent,
       rawSnippet: articlesTable.rawSnippet,
       processingStage: articlesTable.processingStage,
+      processingStatus: articlesTable.processingStatus,
+      stageRetryCounts: articlesTable.stageRetryCounts,
     })
     .from(articlesTable)
     .where(eq(articlesTable.id, articleId))
@@ -83,6 +96,26 @@ export async function processArticlePipeline(
 
   if (!article) {
     throw new Error(`processArticlePipeline: article ${articleId} not found`);
+  }
+
+  // ── Determine resume point ─────────────────────────────────────────────────
+  const priorStage = article.processingStage as ProcessingStage | null;
+  const priorStatus = article.processingStatus;
+  const isResume =
+    priorStage !== null &&
+    priorStage !== "filtered" &&
+    (priorStatus === "failed" || priorStatus === "processing");
+
+  // The first stage to (re-)run. On a fresh run this is always "enriched".
+  // On a resume it is the stage AFTER the last successfully persisted one.
+  const resumeFromStage: ProcessingStage =
+    isResume && priorStage ? (getNextStage(priorStage) ?? "enriched") : "enriched";
+
+  if (isResume) {
+    pipelineLog.info(
+      { priorStage, priorStatus, resumeFromStage },
+      "pipeline: resuming from prior partial run"
+    );
   }
 
   // ── Mark as in-progress ────────────────────────────────────────────────────
@@ -97,96 +130,149 @@ export async function processArticlePipeline(
     })
     .where(eq(articlesTable.id, articleId));
 
-  pipelineLog.info({ stage: "start" }, "pipeline: starting");
+  pipelineLog.info({ stage: "start", isResume, resumeFromStage }, "pipeline: starting");
+
+  // ── Current retry counts (preserve across resume) ─────────────────────────
+  const retryCounts: Record<string, number> = { ...(article.stageRetryCounts ?? {}) };
 
   // ── State accumulated across stages ───────────────────────────────────────
   let eligibilityData: EligibilityData | null = null;
   let enrichmentData: EnrichmentData | null = null;
+  let earlyIssuerData: IssuerData | null = null;
   let issuerData: IssuerData | null = null;
   let classificationData: ClassificationData | null = null;
   let scoringData: ScoringData | null = null;
   let marketData: MarketValidationData | null = null;
 
-  // ── Helper: record stage output and persist current stage ─────────────────
+  // On resume, pre-populate rawContent from the DB row so downstream stages
+  // that depend on enriched content can still access it.
+  if (isResume && article.rawContent) {
+    enrichmentData = {
+      rawContent: article.rawContent,
+      contentSourceType: "rss_snippet", // conservative fallback; actual type is in metadata
+      contentDepthScore: 0,
+    };
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  /** Returns true when a stage should be skipped because it was already completed. */
+  function shouldSkip(stage: ProcessingStage): boolean {
+    if (!isResume) return false;
+    const stageIdx = STAGE_ORDER.indexOf(stage);
+    const resumeIdx = STAGE_ORDER.indexOf(resumeFromStage);
+    return stageIdx < resumeIdx;
+  }
+
+  /** Record stage output and persist current stage to DB. */
   async function persistStage(
     stage: ProcessingStage,
     output: StageOutput,
-    updates: Record<string, unknown>
+    updates: Record<string, unknown>,
+    issuerTracking?: IssuerTracking,
+    confidenceBreakdown?: ScoringData["confidenceBreakdown"]
   ): Promise<void> {
     stageOutputs.push(output);
+    const metadata = buildMetadata(stageOutputs, issuerTracking, confidenceBreakdown, classificationData);
     await db
       .update(articlesTable)
       .set({
         processingStage: stage,
         lastProcessedAt: new Date(),
-        processingMetadata: buildMetadata(stageOutputs, updates),
+        stageRetryCounts: retryCounts,
+        processingMetadata: metadata as unknown as Record<string, unknown>,
         ...updates,
       } as Parameters<typeof db.update>[0] extends infer T ? Record<string, unknown> : never)
       .where(eq(articlesTable.id, articleId));
   }
 
-  // ── Helper: build processingMetadata JSON ─────────────────────────────────
+  /** Build standardized processingMetadata. */
   function buildMetadata(
     outputs: StageOutput[],
-    extra?: Record<string, unknown>
-  ): Record<string, unknown> {
+    issuerTracking?: IssuerTracking,
+    confidenceBreakdown?: ScoringData["confidenceBreakdown"],
+    classification?: ClassificationData | null
+  ): ProcessingMetadata {
+    const rulesMatched = classification?.ruleOverrides.map((r) => r.ruleName) ?? [];
     return {
       pipelineVersion: PIPELINE_VERSION,
+      ruleSetVersion: RULE_SET_VERSION,
+      confidenceVersion: CONFIDENCE_VERSION,
       stageOutputs: outputs,
-      ...extra,
+      ...(confidenceBreakdown ? { confidenceBreakdown } : {}),
+      ...(issuerTracking ? { issuerTracking } : {}),
+      ...(rulesMatched.length > 0 ? { rulesMatched } : {}),
     };
   }
+
+  // ── Issuer tracking accumulator (both passes) ──────────────────────────────
+  let issuerTracking: IssuerTracking = {
+    initialGuess: null,
+    initialGuessSource: "none",
+    final: null,
+    finalSource: "none",
+  };
 
   // =========================================================================
   // Stage 1: Eligibility
   // =========================================================================
   {
     const stageStart = Date.now();
-    pipelineLog.info({ stage: "eligibility" }, "pipeline: stage start");
-    try {
-      const result = await processEligibility({
-        title: article.title,
-        rawContent: article.rawContent,
-      });
-      eligibilityData = result.data;
-      const durationMs = Date.now() - stageStart;
 
-      if (!eligibilityData.eligible) {
-        const stageOut: StageOutput = {
-          stage: "filtered",
-          durationMs,
-          success: false,
-          error: eligibilityData.reason,
-        };
-        await persistStage("filtered", stageOut, {
-          processingStatus: "filtered",
-          processingError: eligibilityData.reason ?? "filtered",
-          processingCompletedAt: new Date(),
+    if (shouldSkip("enriched")) {
+      pipelineLog.debug({ stage: "eligibility" }, "pipeline: stage skipped (resume)");
+    } else {
+      pipelineLog.info({ stage: "eligibility" }, "pipeline: stage start");
+      try {
+        const result = await processEligibility({
+          title: article.title,
+          rawContent: article.rawContent,
         });
-        pipelineLog.info(
-          { stage: "eligibility", reason: eligibilityData.reason, durationMs },
-          "pipeline: article filtered"
-        );
-        return {
-          articleId,
-          jobId,
-          finalStage: "filtered",
-          finalStatus: "filtered",
-          totalDurationMs: Date.now() - pipelineStart,
-          stageOutputs,
-        };
-      }
+        eligibilityData = result.data;
+        const durationMs = Date.now() - stageStart;
 
-      const stageOut: StageOutput = {
-        stage: "enriched",
-        durationMs,
-        success: true,
-        data: eligibilityData as unknown as Record<string, unknown>,
-      };
-      stageOutputs.push(stageOut);
-      pipelineLog.info({ stage: "eligibility", durationMs }, "pipeline: stage complete");
-    } catch (err) {
-      return await handleStageError("enriched", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog, jobId);
+        if (!eligibilityData.eligible) {
+          const stageOut: StageOutput = {
+            stage: "filtered",
+            durationMs,
+            success: false,
+            error: eligibilityData.reason,
+          };
+          await persistStage("filtered", stageOut, {
+            processingStatus: "filtered",
+            processingError: eligibilityData.reason ?? "filtered",
+            processingCompletedAt: new Date(),
+          });
+          pipelineLog.info(
+            { stage: "eligibility", reason: eligibilityData.reason, durationMs },
+            "pipeline: article filtered"
+          );
+          return {
+            articleId,
+            jobId,
+            finalStage: "filtered",
+            finalStatus: "filtered",
+            totalDurationMs: Date.now() - pipelineStart,
+            stageOutputs,
+            resumed: isResume,
+          };
+        }
+
+        const stageOut: StageOutput = {
+          stage: "enriched",
+          durationMs,
+          success: true,
+          data: eligibilityData as unknown as Record<string, unknown>,
+        };
+        stageOutputs.push(stageOut);
+        pipelineLog.info({ stage: "eligibility", durationMs }, "pipeline: stage complete");
+      } catch (err) {
+        return await handleStageError(
+          "enriched", err, pipelineStart, stageStart,
+          stageOutputs, articleId, pipelineLog, jobId,
+          retryCounts, buildMetadata, issuerTracking, isResume
+        );
+      }
     }
   }
 
@@ -195,41 +281,50 @@ export async function processArticlePipeline(
   // =========================================================================
   {
     const stageStart = Date.now();
-    pipelineLog.info({ stage: "enrichment" }, "pipeline: stage start");
-    try {
-      const result = await processEnrichment({
-        url: article.url,
-        source: article.source,
-        rawSnippet: article.rawSnippet ?? article.rawContent ?? "",
-      });
-      enrichmentData = result.data;
-      const durationMs = Date.now() - stageStart;
-      const stageOut: StageOutput = {
-        stage: "enriched",
-        durationMs,
-        success: true,
-        data: {
+
+    if (shouldSkip("enriched")) {
+      pipelineLog.debug({ stage: "enrichment" }, "pipeline: stage skipped (resume)");
+    } else {
+      pipelineLog.info({ stage: "enrichment" }, "pipeline: stage start");
+      try {
+        const result = await processEnrichment({
+          url: article.url,
+          source: article.source,
+          rawSnippet: article.rawSnippet ?? article.rawContent ?? "",
+        });
+        enrichmentData = result.data;
+        const durationMs = Date.now() - stageStart;
+        const stageOut: StageOutput = {
+          stage: "enriched",
+          durationMs,
+          success: true,
+          data: {
+            contentSourceType: enrichmentData.contentSourceType,
+            contentDepthScore: enrichmentData.contentDepthScore,
+            rawContentLength: enrichmentData.rawContent.length,
+          },
+        };
+        await persistStage("enriched", stageOut, {
+          rawContent: enrichmentData.rawContent,
           contentSourceType: enrichmentData.contentSourceType,
           contentDepthScore: enrichmentData.contentDepthScore,
-          rawContentLength: enrichmentData.rawContent.length,
-        },
-      };
-      await persistStage("enriched", stageOut, {
-        rawContent: enrichmentData.rawContent,
-        contentSourceType: enrichmentData.contentSourceType,
-        contentDepthScore: enrichmentData.contentDepthScore,
-      });
-      pipelineLog.info(
-        { stage: "enrichment", contentDepthScore: enrichmentData.contentDepthScore, durationMs },
-        "pipeline: stage complete"
-      );
-    } catch (err) {
-      return await handleStageError("enriched", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog, jobId);
+        }, issuerTracking);
+        pipelineLog.info(
+          { stage: "enrichment", contentDepthScore: enrichmentData.contentDepthScore, durationMs },
+          "pipeline: stage complete"
+        );
+      } catch (err) {
+        return await handleStageError(
+          "enriched", err, pipelineStart, stageStart,
+          stageOutputs, articleId, pipelineLog, jobId,
+          retryCounts, buildMetadata, issuerTracking, isResume
+        );
+      }
     }
   }
 
   // Re-check eligibility after enrichment (content may have changed)
-  {
+  if (!shouldSkip("enriched")) {
     const recheckContent = enrichmentData?.rawContent ?? article.rawContent;
     const noiseRecheck = (recheckContent?.trim().length ?? 0) > 0;
     if (!noiseRecheck && !eligibilityData?.titleOverride) {
@@ -238,6 +333,7 @@ export async function processArticlePipeline(
         processingStatus: "filtered",
         processingError: "empty_content_after_enrichment",
         processingCompletedAt: new Date(),
+        stageRetryCounts: retryCounts,
       }).where(eq(articlesTable.id, articleId));
       return {
         articleId, jobId,
@@ -245,108 +341,164 @@ export async function processArticlePipeline(
         finalStatus: "filtered",
         totalDurationMs: Date.now() - pipelineStart,
         stageOutputs,
+        resumed: isResume,
       };
     }
   }
 
   // =========================================================================
-  // Stage 3: Issuer identification (pre-AI pass — will be refined in stage 4)
+  // Stage 3a: Early heuristic issuer extraction (before classification)
   // =========================================================================
-  // We call extractIssuer again after classification with the AI-provided name.
-  // This first pass stores a placeholder; stage 4 will refine it.
+  {
+    const stageStart = Date.now();
+
+    if (shouldSkip("issuer_identified")) {
+      pipelineLog.debug({ stage: "early_issuer" }, "pipeline: stage skipped (resume)");
+    } else {
+      pipelineLog.info({ stage: "early_issuer" }, "pipeline: stage start");
+      try {
+        const result = await extractIssuerHeuristic({
+          title: article.title,
+          rawContent: enrichmentData?.rawContent ?? article.rawContent,
+        });
+        earlyIssuerData = result.data;
+        const durationMs = Date.now() - stageStart;
+
+        // Update issuer tracking with initial guess
+        issuerTracking = {
+          ...issuerTracking,
+          initialGuess: earlyIssuerData.issuerName,
+          initialGuessSource: earlyIssuerData.issuerName ? "heuristic" : "none",
+        };
+
+        pipelineLog.info(
+          { stage: "early_issuer", initialGuess: earlyIssuerData.issuerName, durationMs },
+          "pipeline: stage complete"
+        );
+      } catch (err) {
+        // Early issuer extraction is non-fatal — log and continue
+        pipelineLog.warn(
+          { stage: "early_issuer", err },
+          "pipeline: early issuer extraction failed (non-fatal)"
+        );
+      }
+    }
+  }
 
   // =========================================================================
   // Stage 4: Classification (AI + deterministic rules)
   // =========================================================================
   {
     const stageStart = Date.now();
-    pipelineLog.info({ stage: "classification" }, "pipeline: stage start");
-    try {
-      const result = await classifyEvent({
-        title: article.title,
-        rawContent: enrichmentData?.rawContent ?? article.rawContent,
-      });
-      classificationData = result.data;
-      const durationMs = Date.now() - stageStart;
 
-      // Now run issuer identification with AI-extracted name
-      const issuerResult = await extractIssuer({
-        title: article.title,
-        rawContent: enrichmentData?.rawContent ?? article.rawContent,
-        aiIssuerName: classificationData.aiAnalysis.issuerName,
-      });
-      issuerData = issuerResult.data;
+    if (shouldSkip("classified")) {
+      pipelineLog.debug({ stage: "classification" }, "pipeline: stage skipped (resume)");
+    } else {
+      pipelineLog.info({ stage: "classification" }, "pipeline: stage start");
+      try {
+        const result = await classifyEvent({
+          title: article.title,
+          rawContent: enrichmentData?.rawContent ?? article.rawContent,
+        });
+        classificationData = result.data;
+        const durationMs = Date.now() - stageStart;
 
-      const stageOut: StageOutput = {
-        stage: "classified",
-        durationMs,
-        success: true,
-        data: {
-          eventType: classificationData.eventType,
-          sector: classificationData.sector,
-          sentiment: classificationData.sentiment,
-          rulesMatched: classificationData.ruleOverrides.length,
-          ruleNames: classificationData.ruleOverrides.map((r) => r.ruleName),
-          issuerName: issuerData.issuerName,
-          issuerSource: issuerData.source,
-        },
-      };
+        // Refined issuer identification with AI-extracted name + early guess as fallback
+        const issuerResult = await extractIssuer({
+          title: article.title,
+          rawContent: enrichmentData?.rawContent ?? article.rawContent,
+          aiIssuerName: classificationData.aiAnalysis.issuerName,
+          earlyGuess: earlyIssuerData?.issuerName ?? null,
+        });
+        issuerData = issuerResult.data;
 
-      const ai = classificationData.aiAnalysis;
-      await persistStage("classified", stageOut, {
-        summary: sanitizeNullStr(ai.summary),
-        sector: sanitizeNullStr(ai.sector),
-        eventType: sanitizeNullStr(classificationData.eventType),
-        sentiment: sanitizeNullStr(ai.sentiment),
-        whyItMatters: sanitizeNullStr(ai.whyItMatters),
-        whoCares: ai.whoCares.join(", ") || null,
-        issuerName: issuerData.issuerName,
-        urgencyScore: ai.urgencyScore,
-        finalUrgencyScore: classificationData.finalUrgencyScore,
-        creditSignalScore: ai.creditSignalScore,
-        covenantFlag: ai.covenantFlag,
-        covenantType: sanitizeNullStr(ai.covenantType),
-        ratingMentioned: sanitizeNullStr(ai.ratingMentioned),
-        ratingAgency: sanitizeNullStr(ai.ratingAgency),
-        ratingIsDowngrade: ai.ratingIsDowngrade,
-        ratingIsUpgrade: ai.ratingIsUpgrade,
-        ratingIsCCCThreshold: ai.ratingIsCCCThreshold,
-        leverageMentioned: ai.leverageMentioned,
-        liquidityConcern: ai.liquidityConcern,
-        refinancingRisk: ai.refinancingRisk,
-        earningsMiss: ai.earningsMiss,
-        cloImpact: ai.cloImpact,
-        cloRelevance: sanitizeNullStr(ai.cloRelevance),
-        cloLoanVsBond: sanitizeNullStr(ai.cloLoanVsBond),
-        cloWarfImpact: sanitizeNullStr(ai.cloWarfImpact),
-        cloCCCBucketRisk: ai.cloCCCBucketRisk,
-        cloExplanation: sanitizeNullStr(ai.cloExplanation),
-        cloImpactTypes: ai.cloImpactTypes,
-        spreadWideningRisk: ai.spreadWideningRisk,
-        forcedSellingRisk: ai.forcedSellingRisk,
-        distressedRisk: ai.distressedRisk,
-        tradeDirection: sanitizeNullStr(ai.tradeDirection),
-        tradeRationale: sanitizeNullStr(ai.tradeRationale),
-        potentialTrades: ai.potentialTrades,
-        marketsImpacted: ai.marketsImpacted,
-        marketImpact: sanitizeNullStr(ai.marketImpact),
-        creditSummaryJson: ai.creditSummary ?? null,
-        scoreExplanationJson: ai.scoreExplanation ?? null,
-        processedAt: new Date(),
-      });
+        // Update issuer tracking with refined result
+        issuerTracking = {
+          ...issuerTracking,
+          final: issuerData.issuerName,
+          finalSource: (issuerData.source === "ai" || issuerData.source === "heuristic" || issuerData.source === "none")
+            ? issuerData.source
+            : "none",
+        };
 
-      pipelineLog.info(
-        {
-          stage: "classification",
-          eventType: classificationData.eventType,
-          rulesMatched: classificationData.ruleOverrides.length,
-          issuerName: issuerData.issuerName,
+        const stageOut: StageOutput = {
+          stage: "classified",
           durationMs,
-        },
-        "pipeline: stage complete"
-      );
-    } catch (err) {
-      return await handleStageError("classified", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog, jobId);
+          success: true,
+          data: {
+            eventType: classificationData.eventType,
+            sector: classificationData.sector,
+            sentiment: classificationData.sentiment,
+            rulesMatched: classificationData.ruleOverrides.length,
+            ruleNames: classificationData.ruleOverrides.map((r) => r.ruleName),
+            ruleSetVersion: RULE_SET_VERSION,
+            issuerName: issuerData.issuerName,
+            issuerSource: issuerData.source,
+            issuerMode: issuerData.mode,
+          },
+        };
+
+        const ai = classificationData.aiAnalysis;
+        await persistStage("classified", stageOut, {
+          summary: sanitizeNullStr(ai.summary),
+          sector: sanitizeNullStr(ai.sector),
+          eventType: sanitizeNullStr(classificationData.eventType),
+          sentiment: sanitizeNullStr(ai.sentiment),
+          whyItMatters: sanitizeNullStr(ai.whyItMatters),
+          whoCares: ai.whoCares.join(", ") || null,
+          issuerName: issuerData.issuerName,
+          urgencyScore: ai.urgencyScore,
+          finalUrgencyScore: classificationData.finalUrgencyScore,
+          creditSignalScore: ai.creditSignalScore,
+          covenantFlag: ai.covenantFlag,
+          covenantType: sanitizeNullStr(ai.covenantType),
+          ratingMentioned: sanitizeNullStr(ai.ratingMentioned),
+          ratingAgency: sanitizeNullStr(ai.ratingAgency),
+          ratingIsDowngrade: ai.ratingIsDowngrade,
+          ratingIsUpgrade: ai.ratingIsUpgrade,
+          ratingIsCCCThreshold: ai.ratingIsCCCThreshold,
+          leverageMentioned: ai.leverageMentioned,
+          liquidityConcern: ai.liquidityConcern,
+          refinancingRisk: ai.refinancingRisk,
+          earningsMiss: ai.earningsMiss,
+          cloImpact: ai.cloImpact,
+          cloRelevance: sanitizeNullStr(ai.cloRelevance),
+          cloLoanVsBond: sanitizeNullStr(ai.cloLoanVsBond),
+          cloWarfImpact: sanitizeNullStr(ai.cloWarfImpact),
+          cloCCCBucketRisk: ai.cloCCCBucketRisk,
+          cloExplanation: sanitizeNullStr(ai.cloExplanation),
+          cloImpactTypes: ai.cloImpactTypes,
+          spreadWideningRisk: ai.spreadWideningRisk,
+          forcedSellingRisk: ai.forcedSellingRisk,
+          distressedRisk: ai.distressedRisk,
+          tradeDirection: sanitizeNullStr(ai.tradeDirection),
+          tradeRationale: sanitizeNullStr(ai.tradeRationale),
+          potentialTrades: ai.potentialTrades,
+          marketsImpacted: ai.marketsImpacted,
+          marketImpact: sanitizeNullStr(ai.marketImpact),
+          creditSummaryJson: ai.creditSummary ?? null,
+          scoreExplanationJson: ai.scoreExplanation ?? null,
+          processedAt: new Date(),
+        }, issuerTracking);
+
+        pipelineLog.info(
+          {
+            stage: "classification",
+            eventType: classificationData.eventType,
+            rulesMatched: classificationData.ruleOverrides.length,
+            issuerName: issuerData.issuerName,
+            issuerSource: issuerData.source,
+            durationMs,
+          },
+          "pipeline: stage complete"
+        );
+      } catch (err) {
+        return await handleStageError(
+          "classified", err, pipelineStart, stageStart,
+          stageOutputs, articleId, pipelineLog, jobId,
+          retryCounts, buildMetadata, issuerTracking, isResume
+        );
+      }
     }
   }
 
@@ -355,53 +507,64 @@ export async function processArticlePipeline(
   // =========================================================================
   {
     const stageStart = Date.now();
-    pipelineLog.info({ stage: "scoring" }, "pipeline: stage start");
-    try {
-      const result = await scoreSignal({
-        llmUrgencyScore: classificationData!.aiAnalysis.urgencyScore,
-        rulesMatchedCount: classificationData!.ruleOverrides.length,
-        rulesConfidenceBoost: classificationData!.ruleOverrides.reduce(
-          (sum, r) => sum + r.confidenceBoost,
-          0
-        ),
-        issuerFound: !!issuerData?.issuerName,
-        enrichmentSucceeded:
-          (enrichmentData?.contentSourceType ?? "rss_snippet") !== "rss_snippet",
-        contentDepthScore: enrichmentData?.contentDepthScore ?? 0,
-        marketValidationSignal: null, // market validation not run yet
-        sentiment: classificationData!.sentiment,
-        eventType: classificationData!.eventType,
-      });
-      scoringData = result.data;
-      const durationMs = Date.now() - stageStart;
 
-      const stageOut: StageOutput = {
-        stage: "scored",
-        durationMs,
-        success: true,
-        data: {
+    if (shouldSkip("scored")) {
+      pipelineLog.debug({ stage: "scoring" }, "pipeline: stage skipped (resume)");
+    } else {
+      pipelineLog.info({ stage: "scoring" }, "pipeline: stage start");
+      try {
+        const result = await scoreSignal({
+          llmUrgencyScore: classificationData!.aiAnalysis.urgencyScore,
+          rulesMatchedCount: classificationData!.ruleOverrides.length,
+          rulesConfidenceBoost: classificationData!.ruleOverrides.reduce(
+            (sum, r) => sum + r.confidenceBoost,
+            0
+          ),
+          issuerFound: !!issuerData?.issuerName,
+          enrichmentSucceeded:
+            (enrichmentData?.contentSourceType ?? "rss_snippet") !== "rss_snippet",
+          contentDepthScore: enrichmentData?.contentDepthScore ?? 0,
+          marketValidationSignal: null, // market validation not run yet
+          sentiment: classificationData!.sentiment,
+          eventType: classificationData!.eventType,
+        });
+        scoringData = result.data;
+        const durationMs = Date.now() - stageStart;
+
+        const stageOut: StageOutput = {
+          stage: "scored",
+          durationMs,
+          success: true,
+          data: {
+            classificationConfidence: scoringData.classificationConfidence,
+            needsReview: scoringData.needsReview,
+            reviewReason: scoringData.reviewReason,
+            confidenceVersion: CONFIDENCE_VERSION,
+          },
+        };
+        await persistStage("scored", stageOut, {
           classificationConfidence: scoringData.classificationConfidence,
           needsReview: scoringData.needsReview,
           reviewReason: scoringData.reviewReason,
-        },
-      };
-      await persistStage("scored", stageOut, {
-        classificationConfidence: scoringData.classificationConfidence,
-        needsReview: scoringData.needsReview,
-        reviewReason: scoringData.reviewReason,
-      });
-      pipelineLog.info(
-        {
-          stage: "scoring",
-          confidence: scoringData.classificationConfidence.toFixed(3),
-          needsReview: scoringData.needsReview,
-          reviewReason: scoringData.reviewReason,
-          durationMs,
-        },
-        "pipeline: stage complete"
-      );
-    } catch (err) {
-      return await handleStageError("scored", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog, jobId);
+        }, issuerTracking, scoringData.confidenceBreakdown);
+
+        pipelineLog.info(
+          {
+            stage: "scoring",
+            confidence: scoringData.classificationConfidence.toFixed(3),
+            needsReview: scoringData.needsReview,
+            reviewReason: scoringData.reviewReason,
+            durationMs,
+          },
+          "pipeline: stage complete"
+        );
+      } catch (err) {
+        return await handleStageError(
+          "scored", err, pipelineStart, stageStart,
+          stageOutputs, articleId, pipelineLog, jobId,
+          retryCounts, buildMetadata, issuerTracking, isResume
+        );
+      }
     }
   }
 
@@ -448,6 +611,7 @@ export async function processArticlePipeline(
           stockMove1D: marketData.stockMove1D,
           hyETFMove: marketData.hyETFMove,
           refinedConfidence: scoringData.classificationConfidence,
+          confidenceVersion: CONFIDENCE_VERSION,
         },
       };
 
@@ -458,14 +622,12 @@ export async function processArticlePipeline(
         hyETFMove: marketData.hyETFMove,
         marketValidationSignal: marketData.validationSignal,
         confidenceScore: marketData.confidenceScore,
-        // Update confidence with market-refined score
         classificationConfidence: scoringData.classificationConfidence,
         needsReview: scoringData.needsReview,
         reviewReason: scoringData.reviewReason,
-        // Final pipeline state
         processingStatus: "success",
         processingCompletedAt: new Date(),
-      });
+      }, issuerTracking, scoringData.confidenceBreakdown);
 
       pipelineLog.info(
         {
@@ -475,6 +637,7 @@ export async function processArticlePipeline(
           needsReview: scoringData.needsReview,
           totalDurationMs,
           durationMs,
+          isResume,
         },
         "pipeline: complete"
       );
@@ -488,15 +651,20 @@ export async function processArticlePipeline(
         stageOutputs,
         classificationConfidence: scoringData.classificationConfidence,
         needsReview: scoringData.needsReview,
+        resumed: isResume,
       };
     } catch (err) {
-      return await handleStageError("validated", err, pipelineStart, stageStart, stageOutputs, articleId, pipelineLog, jobId);
+      return await handleStageError(
+        "validated", err, pipelineStart, stageStart,
+        stageOutputs, articleId, pipelineLog, jobId,
+        retryCounts, buildMetadata, issuerTracking, isResume
+      );
     }
   }
 }
 
 // ---------------------------------------------------------------------------
-// Error handler
+// Error handler with per-stage retry tracking
 // ---------------------------------------------------------------------------
 
 async function handleStageError(
@@ -507,7 +675,16 @@ async function handleStageError(
   stageOutputs: StageOutput[],
   articleId: number,
   log: Logger,
-  jobId: string
+  jobId: string,
+  retryCounts: Record<string, number>,
+  buildMetadata: (
+    outputs: StageOutput[],
+    issuerTracking?: IssuerTracking,
+    confidenceBreakdown?: ScoringData["confidenceBreakdown"],
+    classification?: ClassificationData | null
+  ) => Record<string, unknown>,
+  issuerTracking: IssuerTracking,
+  isResume: boolean
 ): Promise<PipelineResult> {
   const durationMs = Date.now() - stageStart;
   const errorMessage =
@@ -517,6 +694,11 @@ async function handleStageError(
         ? err.message
         : String(err);
 
+  // Increment retry count for this stage
+  retryCounts[stage] = (retryCounts[stage] ?? 0) + 1;
+  const retryCount = retryCounts[stage];
+  const permanentlyFailed = retryCount >= STAGE_RETRY_MAX;
+
   stageOutputs.push({
     stage,
     durationMs,
@@ -524,22 +706,36 @@ async function handleStageError(
     error: errorMessage,
   });
 
-  log.error({ stage, err, durationMs }, `pipeline: stage failed`);
+  log.error(
+    { stage, err, durationMs, retryCount, maxRetries: STAGE_RETRY_MAX, permanentlyFailed },
+    `pipeline: stage failed`
+  );
+
+  const metadata = buildMetadata(stageOutputs, issuerTracking);
+  const metadataWithFail = {
+    ...(metadata as Record<string, unknown>),
+    failedAtStage: stage,
+  };
 
   await db
     .update(articlesTable)
     .set({
       processingStatus: "failed",
       processingError: errorMessage,
+      lastStageError: errorMessage,
       processingStage: stage,
       lastProcessedAt: new Date(),
-      processingMetadata: {
-        pipelineVersion: PIPELINE_VERSION,
-        stageOutputs,
-        failedAtStage: stage,
-      },
+      stageRetryCounts: retryCounts,
+      processingMetadata: metadataWithFail,
     })
     .where(eq(articlesTable.id, articleId));
+
+  if (permanentlyFailed) {
+    log.error(
+      { stage, retryCount, maxRetries: STAGE_RETRY_MAX },
+      "pipeline: stage permanently failed — max retries reached"
+    );
+  }
 
   return {
     articleId,
@@ -548,5 +744,7 @@ async function handleStageError(
     finalStatus: "failed",
     totalDurationMs: Date.now() - pipelineStart,
     stageOutputs,
+    resumed: isResume,
   };
 }
+

@@ -12,6 +12,8 @@
  * true with a human-readable `reviewReason`.
  */
 
+import { CONFIDENCE_VERSION } from "./traceability";
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -64,6 +66,8 @@ export interface ConfidenceResult {
     completenessComponent: number;
     marketComponent: number;
   };
+  /** Version of the confidence scoring algorithm used. */
+  confidenceVersion: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,5 +141,6 @@ export function computeClassificationConfidence(
     needsReview,
     reviewReason,
     breakdown: { llmComponent, rulesComponent, completenessComponent, marketComponent },
+    confidenceVersion: CONFIDENCE_VERSION,
   };
 }

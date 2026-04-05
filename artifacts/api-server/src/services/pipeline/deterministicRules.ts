@@ -9,7 +9,11 @@
  *   2. Boosts `classificationConfidence` by the rule's `confidenceBoost`
  *   3. Boosts `urgencyScore` by the rule's `urgencyBoost` (capped downstream)
  *   4. Records itself in `processingMetadata.ruleOverrides` for auditability
+ *
+ * Rules are defined as a typed configuration array (RULE_DEFINITIONS).
+ * Add new rules to that array — no other code needs to change.
  */
+import { RULE_SET_VERSION } from "./traceability";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,6 +58,10 @@ export interface DeterministicRuleResult {
     distressedRisk?: true;
     ratingIsDowngrade?: true;
   };
+  /** Version of the rule set that was evaluated. */
+  ruleSetVersion: string;
+  /** Total number of rules that matched. */
+  rulesMatchedCount: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -259,5 +267,5 @@ export function applyDeterministicRules(
     }
   }
 
-  return { matches, eventType, urgencyBoost, confidenceBoost, flagOverrides };
+  return { matches, eventType, urgencyBoost, confidenceBoost, flagOverrides, ruleSetVersion: RULE_SET_VERSION, rulesMatchedCount: matches.length };
 }

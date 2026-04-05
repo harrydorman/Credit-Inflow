@@ -148,21 +148,88 @@ export async function processEnrichment(
 }
 
 // ---------------------------------------------------------------------------
-// Stage 3: Issuer identification
+// Stage 3a: Early heuristic issuer extraction (before classification)
 // ---------------------------------------------------------------------------
+
+export interface EarlyIssuerInput {
+  title: string;
+  rawContent: string | null;
+}
+
+/**
+ * Attempts to identify the issuer using simple heuristics (regex + title
+ * parsing) BEFORE the AI classification stage. This early guess is stored in
+ * processingMetadata.issuerTracking.initialGuess and may be overridden by
+ * the post-classification refined pass.
+ *
+ * Returns null issuerName when no heuristic match is found.
+ */
+export async function extractIssuerHeuristic(
+  input: EarlyIssuerInput
+): Promise<StageResult<IssuerData>> {
+  const start = Date.now();
+  const text = `${input.title} ${input.rawContent ?? ""}`;
+
+  // Simple heuristic: look for capitalized proper-noun sequences that are
+  // commonly issuer names (2-3 consecutive title-cased words, not all-caps
+  // acronyms, not common English stop words).
+  const STOP_WORDS = new Set([
+    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "as", "is", "was", "are", "were", "be", "been",
+    "has", "have", "had", "will", "would", "could", "should", "may", "might",
+    "its", "this", "that", "these", "those", "said", "says", "after", "before",
+    "amid", "over", "under", "from", "into", "per", "via",
+  ]);
+
+  const words = input.title.split(/\s+/);
+  const candidates: string[] = [];
+  let current: string[] = [];
+
+  for (const word of words) {
+    const clean = word.replace(/[^a-zA-Z'-]/g, "");
+    const isCapitalized = /^[A-Z][a-z]/.test(clean);
+    const isStop = STOP_WORDS.has(clean.toLowerCase());
+
+    if (isCapitalized && !isStop && clean.length > 1) {
+      current.push(clean);
+    } else {
+      if (current.length >= 1) candidates.push(current.join(" "));
+      current = [];
+    }
+  }
+  if (current.length >= 1) candidates.push(current.join(" "));
+
+  // Take the longest candidate sequence from the title as the guess
+  const bestGuess = candidates.sort((a, b) => b.length - a.length)[0] ?? null;
+
+  // Try to canonicalize; if no canonical match, still return the raw guess
+  const canonical = bestGuess ? (canonicalizeIssuer(bestGuess) ?? bestGuess) : null;
+
+  return {
+    stage: "issuer_identified",
+    durationMs: Date.now() - start,
+    data: {
+      issuerName: canonical,
+      source: canonical ? "heuristic" : "none",
+      mode: "early",
+    },
+  };
+}
 
 export interface IssuerInput {
   title: string;
   rawContent: string | null;
   /** Optional issuer extracted by LLM (passed in after classifyEvent if available). */
   aiIssuerName?: string | null;
+  /** Early heuristic guess from the pre-classification pass (used as fallback). */
+  earlyGuess?: string | null;
 }
 
 /**
- * Identifies and canonicalises the issuer name.
+ * Refined issuer identification using the AI-extracted name (post-classification).
  *
- * Priority: AI-extracted name → rule-based heuristics (future) → null.
- * The `source` field records how the issuer was found for auditability.
+ * Priority: AI-extracted name → early heuristic guess → null.
+ * The `source` and `mode` fields record how the issuer was found.
  */
 export async function extractIssuer(
   input: IssuerInput
@@ -175,15 +242,24 @@ export async function extractIssuer(
       return {
         stage: "classified",
         durationMs: Date.now() - start,
-        data: { issuerName: canonical, source: "ai" },
+        data: { issuerName: canonical, source: "ai", mode: "refined" },
       };
     }
+  }
+
+  // Fall back to early heuristic guess when AI didn't extract one
+  if (input.earlyGuess) {
+    return {
+      stage: "classified",
+      durationMs: Date.now() - start,
+      data: { issuerName: input.earlyGuess, source: "heuristic", mode: "refined" },
+    };
   }
 
   return {
     stage: "classified",
     durationMs: Date.now() - start,
-    data: { issuerName: null, source: "none" },
+    data: { issuerName: null, source: "none", mode: "refined" },
   };
 }
 
@@ -300,6 +376,7 @@ export async function scoreSignal(
       classificationConfidence: result.confidence,
       needsReview: result.needsReview,
       reviewReason: result.reviewReason,
+      confidenceBreakdown: result.breakdown,
     },
   };
 }
