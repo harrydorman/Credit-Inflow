@@ -245,8 +245,7 @@ export function applyDeterministicRules(
       urgencyBoost += rule.urgencyBoost;
       confidenceBoost += rule.confidenceBoost;
       if (rule.flagOverride) {
-        // Set the corresponding flag
-        (flagOverrides as Record<string, true>)[rule.flagOverride] = true;
+        flagOverrides[rule.flagOverride] = true;
       }
     }
   }

@@ -182,7 +182,7 @@ export async function processArticlePipeline(
         stageRetryCounts: retryCounts,
         processingMetadata: metadata as unknown as Record<string, unknown>,
         ...updates,
-      } as Parameters<typeof db.update>[0] extends infer T ? Record<string, unknown> : never)
+      } as Record<string, unknown>)
       .where(eq(articlesTable.id, articleId));
   }
 
