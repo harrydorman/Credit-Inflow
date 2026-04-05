@@ -100,6 +100,12 @@ export const articlesTable = pgTable("articles", {
 
   processedAt: timestamp("processed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+
+  // Deduplication fingerprints (Phase 1)
+  // sha256 hex of normalised title (lowercased, stripped punctuation/whitespace)
+  titleFingerprint: text("title_fingerprint"),
+  // sha256 hex of first 1 000 chars of normalised content
+  contentFingerprint: text("content_fingerprint"),
 });
 
 export const insertArticleSchema = createInsertSchema(articlesTable).omit({
