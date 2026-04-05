@@ -248,6 +248,8 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
         const now = new Date();
 
         if (!hasContent) {
+          // articlesSkippedFiltered: backward-compat field  |  articlesFiltered: new Phase 4 field
+          // Both are incremented for every filtered article (the two paths are mutually exclusive).
           metrics.articlesSkippedFiltered++;
           metrics.articlesFiltered++;
           jobLog.info(
@@ -302,6 +304,7 @@ export async function runIngestion(opts: IngestionOptions = {}): Promise<Ingesti
             lastProcessedAt: now,
           });
           metrics.articlesInserted++;
+          // See empty_content block above for comment on dual metric increment.
           metrics.articlesSkippedFiltered++;
           metrics.articlesFiltered++;
           continue;
