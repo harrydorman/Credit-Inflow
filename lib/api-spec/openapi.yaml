@@ -23,6 +23,8 @@ tags:
     description: Watchlist management operations
   - name: alerts
     description: In-app alert rules and alert events
+  - name: portfolios
+    description: Portfolio management operations
 paths:
   /healthz:
     get:
@@ -401,6 +403,11 @@ paths:
       tags: [alerts]
       summary: List triggered alert events, newest first
       parameters:
+        - name: organizationId
+          in: query
+          required: false
+          schema:
+            type: string
         - name: watchlistId
           in: query
           required: false
@@ -411,6 +418,39 @@ paths:
           required: false
           schema:
             type: boolean
+        - name: severity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [high, medium, low]
+        - name: issuerName
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: eventType
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: portfolioLinked
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: dateFrom
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: dateTo
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
         - name: limit
           in: query
           required: false
@@ -560,6 +600,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /alerts/bulk-read:
+    post:
+      operationId: bulkMarkAlertsRead
+      tags: [alerts]
+      summary: Bulk mark alert events as read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkMarkReadRequest"
+      responses:
+        "200":
+          description: Number of alerts marked read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkMarkReadResult"
+
   /alerts/{id}/read:
     post:
       operationId: markAlertRead
@@ -584,6 +643,245 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /alerts/{id}/unread:
+    post:
+      operationId: markAlertUnread
+      tags: [alerts]
+      summary: Mark an alert event as unread
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Alert event marked as unread
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertEvent"
+        "404":
+          description: Alert event not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /alerts/{id}/feedback:
+    post:
+      operationId: submitAlertFeedback
+      tags: [alerts]
+      summary: Submit usefulness feedback for an alert event
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertFeedbackRequest"
+      responses:
+        "200":
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertFeedback"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Alert event not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portfolios:
+    get:
+      operationId: listPortfolios
+      tags: [portfolios]
+      summary: List portfolios for an organization
+      parameters:
+        - name: organizationId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of portfolios
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioList"
+        "400":
+          description: Missing organizationId
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createPortfolio
+      tags: [portfolios]
+      summary: Create a new portfolio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePortfolioRequest"
+      responses:
+        "201":
+          description: Portfolio created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Portfolio"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portfolios/{id}:
+    get:
+      operationId: getPortfolioDetails
+      tags: [portfolios]
+      summary: Get detailed view of a single portfolio (org-safe)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: organizationId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Portfolio detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioDetail"
+        "400":
+          description: Missing organizationId
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Portfolio not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deletePortfolio
+      tags: [portfolios]
+      summary: Delete a portfolio
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Portfolio deleted
+        "404":
+          description: Portfolio not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portfolios/{id}/holdings:
+    get:
+      operationId: listPortfolioHoldings
+      tags: [portfolios]
+      summary: List holdings for a portfolio
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of portfolio holdings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioHoldingList"
+
+  /portfolios/{id}/holdings/csv:
+    post:
+      operationId: ingestPortfolioCSV
+      tags: [portfolios]
+      summary: Ingest CSV holdings into a portfolio
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                csv:
+                  type: string
+              required:
+                - csv
+      responses:
+        "200":
+          description: Ingestion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioIngestionResult"
+        "400":
+          description: Invalid portfolio id or missing csv
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portfolios/{id}/exposure-alerts:
+    get:
+      operationId: getPortfolioExposureAlerts
+      tags: [portfolios]
+      summary: Get alert events grouped by issuer for portfolio exposure
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Grouped exposure alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioExposureAlertList"
 
 components:
   schemas:
@@ -1487,3 +1785,289 @@ components:
           minItems: 1
         covenantFlagOnly:
           type: boolean
+
+    AlertFeedbackRequest:
+      type: object
+      properties:
+        organizationId:
+          type: string
+        userId:
+          type: string
+          nullable: true
+        rating:
+          type: string
+          enum: [useful, noise, investigate_later]
+        note:
+          type: string
+          nullable: true
+      required:
+        - organizationId
+        - rating
+
+    AlertFeedback:
+      type: object
+      properties:
+        id:
+          type: integer
+        alertEventId:
+          type: integer
+        organizationId:
+          type: string
+        userId:
+          type: ["string", "null"]
+        rating:
+          type: string
+          enum: [useful, noise, investigate_later]
+        note:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - alertEventId
+        - organizationId
+        - rating
+        - createdAt
+        - updatedAt
+
+    BulkMarkReadRequest:
+      type: object
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+          minItems: 1
+        organizationId:
+          type: string
+      required:
+        - ids
+
+    BulkMarkReadResult:
+      type: object
+      properties:
+        updated:
+          type: integer
+      required:
+        - updated
+
+    Portfolio:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - organizationId
+        - name
+        - createdAt
+        - updatedAt
+
+    PortfolioList:
+      type: object
+      properties:
+        portfolios:
+          type: array
+          items:
+            $ref: "#/components/schemas/Portfolio"
+      required:
+        - portfolios
+
+    PortfolioHolding:
+      type: object
+      properties:
+        id:
+          type: integer
+        portfolioId:
+          type: integer
+        issuerName:
+          type: string
+        positionSize:
+          type: ["number", "null"]
+        canonicalIssuerName:
+          type: ["string", "null"]
+        mappingConfidence:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - portfolioId
+        - issuerName
+        - createdAt
+
+    PortfolioHoldingList:
+      type: object
+      properties:
+        holdings:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortfolioHolding"
+      required:
+        - holdings
+
+    PortfolioDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        holdingsCount:
+          type: integer
+        mappedIssuerCount:
+          type: integer
+        unmappedIssuerCount:
+          type: integer
+        alertCount:
+          type: integer
+        highSeverityAlertCount:
+          type: integer
+        holdings:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortfolioHolding"
+      required:
+        - id
+        - organizationId
+        - name
+        - createdAt
+        - updatedAt
+        - holdingsCount
+        - mappedIssuerCount
+        - unmappedIssuerCount
+        - alertCount
+        - highSeverityAlertCount
+        - holdings
+
+    PortfolioIngestionResult:
+      type: object
+      properties:
+        portfolioId:
+          type: integer
+        rowsProcessed:
+          type: integer
+        holdingsCreated:
+          type: integer
+        holdingsSkipped:
+          type: integer
+        issuersMapped:
+          type: integer
+        issuersUnmapped:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+      required:
+        - portfolioId
+        - rowsProcessed
+        - holdingsCreated
+        - holdingsSkipped
+        - issuersMapped
+        - issuersUnmapped
+        - errors
+
+    PortfolioExposureAlert:
+      type: object
+      properties:
+        issuerName:
+          type: string
+        totalAlerts:
+          type: integer
+        highSeverityCount:
+          type: integer
+        mediumSeverityCount:
+          type: integer
+        lowSeverityCount:
+          type: integer
+        latestTriggeredAt:
+          type: string
+          format: date-time
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              alertRuleId:
+                type: integer
+              articleId:
+                type: integer
+              eventType:
+                type: ["string", "null"]
+              confidence:
+                type: ["number", "null"]
+              severity:
+                type: ["string", "null"]
+              triggeredAt:
+                type: string
+                format: date-time
+              isRead:
+                type: boolean
+            required:
+              - id
+              - alertRuleId
+              - articleId
+              - triggeredAt
+              - isRead
+      required:
+        - issuerName
+        - totalAlerts
+        - highSeverityCount
+        - mediumSeverityCount
+        - lowSeverityCount
+        - latestTriggeredAt
+        - events
+
+    PortfolioExposureAlertList:
+      type: object
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortfolioExposureAlert"
+      required:
+        - alerts
+
+    CreatePortfolioRequest:
+      type: object
+      properties:
+        organizationId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+      required:
+        - organizationId
+        - name

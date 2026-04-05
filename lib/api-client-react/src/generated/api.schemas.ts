@@ -560,6 +560,145 @@ export interface UpdateAlertRuleRequest {
   covenantFlagOnly?: boolean;
 }
 
+export type AlertFeedbackRequestRating =
+  (typeof AlertFeedbackRequestRating)[keyof typeof AlertFeedbackRequestRating];
+
+export const AlertFeedbackRequestRating = {
+  useful: "useful",
+  noise: "noise",
+  investigate_later: "investigate_later",
+} as const;
+
+export interface AlertFeedbackRequest {
+  organizationId: string;
+  userId?: string | null;
+  rating: AlertFeedbackRequestRating;
+  note?: string | null;
+}
+
+export type AlertFeedbackRating =
+  (typeof AlertFeedbackRating)[keyof typeof AlertFeedbackRating];
+
+export const AlertFeedbackRating = {
+  useful: "useful",
+  noise: "noise",
+  investigate_later: "investigate_later",
+} as const;
+
+export interface AlertFeedback {
+  id: number;
+  alertEventId: number;
+  organizationId: string;
+  /** @nullable */
+  userId?: string | null;
+  rating: AlertFeedbackRating;
+  /** @nullable */
+  note?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BulkMarkReadRequest {
+  /** @minItems 1 */
+  ids: number[];
+  organizationId?: string;
+}
+
+export interface BulkMarkReadResult {
+  updated: number;
+}
+
+export interface Portfolio {
+  id: number;
+  organizationId: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PortfolioList {
+  portfolios: Portfolio[];
+}
+
+export interface PortfolioHolding {
+  id: number;
+  portfolioId: number;
+  issuerName: string;
+  /** @nullable */
+  positionSize?: number | null;
+  /** @nullable */
+  canonicalIssuerName?: string | null;
+  /** @nullable */
+  mappingConfidence?: number | null;
+  createdAt: string;
+}
+
+export interface PortfolioHoldingList {
+  holdings: PortfolioHolding[];
+}
+
+export interface PortfolioDetail {
+  id: number;
+  organizationId: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  holdingsCount: number;
+  mappedIssuerCount: number;
+  unmappedIssuerCount: number;
+  alertCount: number;
+  highSeverityAlertCount: number;
+  holdings: PortfolioHolding[];
+}
+
+export interface PortfolioIngestionResult {
+  portfolioId: number;
+  rowsProcessed: number;
+  holdingsCreated: number;
+  holdingsSkipped: number;
+  issuersMapped: number;
+  issuersUnmapped: number;
+  errors: string[];
+}
+
+export type PortfolioExposureAlertEventsItem = {
+  id: number;
+  alertRuleId: number;
+  articleId: number;
+  /** @nullable */
+  eventType?: string | null;
+  /** @nullable */
+  confidence?: number | null;
+  /** @nullable */
+  severity?: string | null;
+  triggeredAt: string;
+  isRead: boolean;
+};
+
+export interface PortfolioExposureAlert {
+  issuerName: string;
+  totalAlerts: number;
+  highSeverityCount: number;
+  mediumSeverityCount: number;
+  lowSeverityCount: number;
+  latestTriggeredAt: string;
+  events: PortfolioExposureAlertEventsItem[];
+}
+
+export interface PortfolioExposureAlertList {
+  alerts: PortfolioExposureAlert[];
+}
+
+export interface CreatePortfolioRequest {
+  organizationId: string;
+  name: string;
+  description?: string | null;
+}
+
 export type ListArticlesParams = {
   sector?: string;
   eventType?: string;
@@ -581,12 +720,40 @@ export type GetWatchlistArticlesParams = {
 };
 
 export type ListAlertEventsParams = {
+  organizationId?: string;
   watchlistId?: number;
   isRead?: boolean;
+  severity?: ListAlertEventsSeverity;
+  issuerName?: string;
+  eventType?: string;
+  portfolioLinked?: boolean;
+  dateFrom?: string;
+  dateTo?: string;
   limit?: number;
   offset?: number;
 };
 
+export type ListAlertEventsSeverity =
+  (typeof ListAlertEventsSeverity)[keyof typeof ListAlertEventsSeverity];
+
+export const ListAlertEventsSeverity = {
+  high: "high",
+  medium: "medium",
+  low: "low",
+} as const;
+
 export type ListAlertRulesParams = {
   watchlistId?: number;
+};
+
+export type ListPortfoliosParams = {
+  organizationId: string;
+};
+
+export type GetPortfolioDetailsParams = {
+  organizationId: string;
+};
+
+export type IngestPortfolioCSVBody = {
+  csv: string;
 };

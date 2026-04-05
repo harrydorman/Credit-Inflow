@@ -730,8 +730,15 @@ export const listAlertEventsQueryLimitDefault = 50;
 export const listAlertEventsQueryOffsetDefault = 0;
 
 export const ListAlertEventsQueryParams = zod.object({
+  organizationId: zod.coerce.string().optional(),
   watchlistId: zod.coerce.number().optional(),
   isRead: zod.coerce.boolean().optional(),
+  severity: zod.enum(["high", "medium", "low"]).optional(),
+  issuerName: zod.coerce.string().optional(),
+  eventType: zod.coerce.string().optional(),
+  portfolioLinked: zod.coerce.boolean().optional(),
+  dateFrom: zod.date().optional(),
+  dateTo: zod.date().optional(),
   limit: zod.coerce.number().default(listAlertEventsQueryLimitDefault),
   offset: zod.coerce.number().default(listAlertEventsQueryOffsetDefault),
 });
@@ -879,6 +886,19 @@ export const DeleteAlertRuleParams = zod.object({
 });
 
 /**
+ * @summary Bulk mark alert events as read
+ */
+
+export const BulkMarkAlertsReadBody = zod.object({
+  ids: zod.array(zod.number()).min(1),
+  organizationId: zod.string().optional(),
+});
+
+export const BulkMarkAlertsReadResponse = zod.object({
+  updated: zod.number(),
+});
+
+/**
  * @summary Mark an alert event as read
  */
 export const MarkAlertReadParams = zod.object({
@@ -896,4 +916,195 @@ export const MarkAlertReadResponse = zod.object({
   eventType: zod.string().nullish(),
   triggeredAt: zod.coerce.date(),
   isRead: zod.boolean(),
+});
+
+/**
+ * @summary Mark an alert event as unread
+ */
+export const MarkAlertUnreadParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const MarkAlertUnreadResponse = zod.object({
+  id: zod.number(),
+  alertRuleId: zod.number(),
+  watchlistId: zod.number(),
+  articleId: zod.number(),
+  issuerName: zod.string(),
+  title: zod.string(),
+  urgency: zod.number().nullish(),
+  eventType: zod.string().nullish(),
+  triggeredAt: zod.coerce.date(),
+  isRead: zod.boolean(),
+});
+
+/**
+ * @summary Submit usefulness feedback for an alert event
+ */
+export const SubmitAlertFeedbackParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const SubmitAlertFeedbackBody = zod.object({
+  organizationId: zod.string(),
+  userId: zod.string().nullish(),
+  rating: zod.enum(["useful", "noise", "investigate_later"]),
+  note: zod.string().nullish(),
+});
+
+export const SubmitAlertFeedbackResponse = zod.object({
+  id: zod.number(),
+  alertEventId: zod.number(),
+  organizationId: zod.string(),
+  userId: zod.string().nullish(),
+  rating: zod.enum(["useful", "noise", "investigate_later"]),
+  note: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary List portfolios for an organization
+ */
+export const ListPortfoliosQueryParams = zod.object({
+  organizationId: zod.coerce.string(),
+});
+
+export const ListPortfoliosResponse = zod.object({
+  portfolios: zod.array(
+    zod.object({
+      id: zod.number(),
+      organizationId: zod.string(),
+      name: zod.string(),
+      description: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Create a new portfolio
+ */
+export const CreatePortfolioBody = zod.object({
+  organizationId: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+});
+
+/**
+ * @summary Get detailed view of a single portfolio (org-safe)
+ */
+export const GetPortfolioDetailsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetPortfolioDetailsQueryParams = zod.object({
+  organizationId: zod.coerce.string(),
+});
+
+export const GetPortfolioDetailsResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+  holdingsCount: zod.number(),
+  mappedIssuerCount: zod.number(),
+  unmappedIssuerCount: zod.number(),
+  alertCount: zod.number(),
+  highSeverityAlertCount: zod.number(),
+  holdings: zod.array(
+    zod.object({
+      id: zod.number(),
+      portfolioId: zod.number(),
+      issuerName: zod.string(),
+      positionSize: zod.number().nullish(),
+      canonicalIssuerName: zod.string().nullish(),
+      mappingConfidence: zod.number().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Delete a portfolio
+ */
+export const DeletePortfolioParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary List holdings for a portfolio
+ */
+export const ListPortfolioHoldingsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListPortfolioHoldingsResponse = zod.object({
+  holdings: zod.array(
+    zod.object({
+      id: zod.number(),
+      portfolioId: zod.number(),
+      issuerName: zod.string(),
+      positionSize: zod.number().nullish(),
+      canonicalIssuerName: zod.string().nullish(),
+      mappingConfidence: zod.number().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Ingest CSV holdings into a portfolio
+ */
+export const IngestPortfolioCSVParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const IngestPortfolioCSVBody = zod.object({
+  csv: zod.string(),
+});
+
+export const IngestPortfolioCSVResponse = zod.object({
+  portfolioId: zod.number(),
+  rowsProcessed: zod.number(),
+  holdingsCreated: zod.number(),
+  holdingsSkipped: zod.number(),
+  issuersMapped: zod.number(),
+  issuersUnmapped: zod.number(),
+  errors: zod.array(zod.string()),
+});
+
+/**
+ * @summary Get alert events grouped by issuer for portfolio exposure
+ */
+export const GetPortfolioExposureAlertsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetPortfolioExposureAlertsResponse = zod.object({
+  alerts: zod.array(
+    zod.object({
+      issuerName: zod.string(),
+      totalAlerts: zod.number(),
+      highSeverityCount: zod.number(),
+      mediumSeverityCount: zod.number(),
+      lowSeverityCount: zod.number(),
+      latestTriggeredAt: zod.coerce.date(),
+      events: zod.array(
+        zod.object({
+          id: zod.number(),
+          alertRuleId: zod.number(),
+          articleId: zod.number(),
+          eventType: zod.string().nullish(),
+          confidence: zod.number().nullish(),
+          severity: zod.string().nullish(),
+          triggeredAt: zod.coerce.date(),
+          isRead: zod.boolean(),
+        }),
+      ),
+    }),
+  ),
 });

@@ -208,3 +208,124 @@ export async function ingestPortfolioCSV(
 
   return result;
 }
+
+// ---------------------------------------------------------------------------
+// Portfolio detail query (org-safe)
+// ---------------------------------------------------------------------------
+
+import { desc, count } from "drizzle-orm";
+import {
+  alertEventsTable,
+  alertRulesTable,
+} from "@workspace/db";
+
+export interface PortfolioDetails {
+  id: number;
+  organizationId: string;
+  name: string;
+  description: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  holdingsCount: number;
+  mappedIssuerCount: number;
+  unmappedIssuerCount: number;
+  alertCount: number;
+  highSeverityAlertCount: number;
+  holdings: Array<{
+    id: number;
+    issuerName: string;
+    positionSize: number | null;
+    canonicalIssuerName: string | null;
+    mappingConfidence: number | null;
+  }>;
+}
+
+/**
+ * Returns full details for a portfolio, verifying org ownership.
+ * Returns null if the portfolio does not exist or belongs to a different org.
+ */
+export async function getPortfolioDetails(
+  portfolioId: number,
+  orgId: string,
+): Promise<PortfolioDetails | null> {
+  const [portfolio] = await db
+    .select()
+    .from(portfoliosTable)
+    .where(eq(portfoliosTable.id, portfolioId))
+    .limit(1);
+
+  if (!portfolio || portfolio.organizationId !== orgId) return null;
+
+  // Holdings with issuer mapping
+  const holdings = await db
+    .select({
+      id: portfolioHoldingsTable.id,
+      issuerName: portfolioHoldingsTable.issuerName,
+      positionSize: portfolioHoldingsTable.positionSize,
+      canonicalIssuerName: portfolioIssuerMapTable.canonicalIssuerName,
+      mappingConfidence: portfolioIssuerMapTable.confidence,
+    })
+    .from(portfolioHoldingsTable)
+    .leftJoin(
+      portfolioIssuerMapTable,
+      eq(portfolioIssuerMapTable.portfolioHoldingId, portfolioHoldingsTable.id),
+    )
+    .where(eq(portfolioHoldingsTable.portfolioId, portfolioId))
+    .orderBy(portfolioHoldingsTable.issuerName);
+
+  const mappedIssuers = new Set(
+    holdings
+      .filter((h) => h.canonicalIssuerName !== null)
+      .map((h) => h.canonicalIssuerName!),
+  );
+  const unmappedCount = holdings.filter((h) => h.canonicalIssuerName === null).length;
+
+  // Alert counts for issuers in this portfolio
+  const issuerNames = [...mappedIssuers];
+  let alertCount = 0;
+  let highSeverityAlertCount = 0;
+
+  if (issuerNames.length > 0) {
+    const { inArray } = await import("drizzle-orm");
+
+    const alertCounts = await db
+      .select({
+        severity: alertEventsTable.severity,
+        cnt: count(),
+      })
+      .from(alertEventsTable)
+      .innerJoin(alertRulesTable, eq(alertEventsTable.alertRuleId, alertRulesTable.id))
+      .where(
+        inArray(alertEventsTable.issuerName, issuerNames),
+      )
+      .groupBy(alertEventsTable.severity);
+
+    for (const row of alertCounts) {
+      alertCount += Number(row.cnt);
+      if (row.severity === "high") highSeverityAlertCount += Number(row.cnt);
+    }
+  }
+
+  return {
+    ...portfolio,
+    holdingsCount: holdings.length,
+    mappedIssuerCount: mappedIssuers.size,
+    unmappedIssuerCount: unmappedCount,
+    alertCount,
+    highSeverityAlertCount,
+    holdings,
+  };
+}
+
+/**
+ * Returns portfolio summary metrics for all portfolios in an org.
+ */
+export async function getPortfoliosForOrganization(orgId: string) {
+  const portfolios = await db
+    .select()
+    .from(portfoliosTable)
+    .where(eq(portfoliosTable.organizationId, orgId))
+    .orderBy(desc(portfoliosTable.createdAt));
+
+  return portfolios;
+}

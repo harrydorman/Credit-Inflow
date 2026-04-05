@@ -3,6 +3,7 @@ import { watchlistsTable } from "./watchlists";
 import { articlesTable } from "./articles";
 import { organizationsTable } from "./tenants";
 import { portfoliosTable } from "./portfolios";
+import { usersTable } from "./tenants";
 
 export const alertRulesTable = pgTable("alert_rules", {
   id: serial("id").primaryKey(),
@@ -76,3 +77,36 @@ export const alertEventsTable = pgTable(
 
 export type AlertEvent = typeof alertEventsTable.$inferSelect;
 export type NewAlertEvent = typeof alertEventsTable.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// alert_feedback
+// ---------------------------------------------------------------------------
+
+export type AlertFeedbackRating = "useful" | "noise" | "investigate_later";
+
+export const alertFeedbackTable = pgTable(
+  "alert_feedback",
+  {
+    id: serial("id").primaryKey(),
+    alertEventId: integer("alert_event_id")
+      .notNull()
+      .references(() => alertEventsTable.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .references(() => usersTable.id, { onDelete: "set null" }),
+    rating: text("rating").$type<AlertFeedbackRating>().notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_alert_feedback").on(t.alertEventId, t.organizationId, t.userId),
+    index("alert_feedback_alert_event_idx").on(t.alertEventId),
+    index("alert_feedback_org_idx").on(t.organizationId),
+  ]
+);
+
+export type AlertFeedback = typeof alertFeedbackTable.$inferSelect;
+export type NewAlertFeedback = typeof alertFeedbackTable.$inferInsert;
