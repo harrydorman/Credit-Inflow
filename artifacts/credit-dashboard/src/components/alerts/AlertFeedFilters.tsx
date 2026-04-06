@@ -138,7 +138,7 @@ export function AlertFeedFilters({
           type="date"
           value={filters.dateFrom}
           onChange={(e) => set("dateFrom", e.target.value)}
-          className="h-7 text-xs font-mono w-34"
+          className="h-7 text-xs font-mono w-36"
           title="From date"
           data-testid="filter-date-from"
         />
@@ -148,7 +148,7 @@ export function AlertFeedFilters({
           type="date"
           value={filters.dateTo}
           onChange={(e) => set("dateTo", e.target.value)}
-          className="h-7 text-xs font-mono w-34"
+          className="h-7 text-xs font-mono w-36"
           title="To date"
           data-testid="filter-date-to"
         />

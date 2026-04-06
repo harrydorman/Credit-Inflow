@@ -29,7 +29,7 @@ A **Clear** button appears automatically when any filter is active. The unread +
 Individual alert row for the table-like feed. Displays:
 
 - **Checkbox** for bulk selection (only unread alerts are selectable for bulk mark-read)
-- **Severity badge** — derived from numeric urgency: `HIGH` (≥ 8), `MED` (5–7), `LOW` (< 4). Color-coded: red / amber / green
+- **Severity badge** — derived from numeric urgency: `HIGH` (≥ 8), `MED` (5–7), `LOW` (≤ 4). Color-coded: red / amber / green
 - **Title** — truncated to two lines; unread alerts use full foreground colour
 - **Issuer name** in monospace
 - **Event type** badge
