@@ -130,14 +130,21 @@ export function computeRankingMetrics(
       ? penalised.reduce((s, c) => s + c.scoreDelta, 0) / penalised.length
       : 0;
 
+  // Build a map from alertId → alert for O(1) lookup (avoids index alignment issues
+  // since compareAlertRankings sorts comparisons by |delta|, not by input order).
+  const alertById = new Map<number, AlertEvent & { ruleName?: string | null }>();
+  for (const alert of alerts) {
+    alertById.set(alert.id, alert as AlertEvent & { ruleName?: string | null });
+  }
+
   // Accumulate event-type boosts and rule penalties from breakdowns
   const eventTypeBoostMap = new Map<string, number>();
   const rulePenaltyMap = new Map<string, number>();
 
-  for (let i = 0; i < alerts.length; i++) {
-    const alert = alerts[i];
-    const breakdown = comparisons[i]?.breakdown;
-    if (!breakdown) continue;
+  for (const comparison of comparisons) {
+    const alert = alertById.get(comparison.alertId);
+    if (!alert) continue;
+    const breakdown = comparison.breakdown;
 
     if (breakdown.eventTypeBoost > 0 && alert.eventType) {
       const prev = eventTypeBoostMap.get(alert.eventType) ?? 0;
@@ -145,8 +152,7 @@ export function computeRankingMetrics(
     }
 
     if (breakdown.ruleNoisePenalty > 0) {
-      // ruleName comes from the alert itself (cast since it's an extended field)
-      const ruleName = (alert as AlertEvent & { ruleName?: string | null }).ruleName;
+      const ruleName = alert.ruleName;
       if (ruleName) {
         const prev = rulePenaltyMap.get(ruleName) ?? 0;
         rulePenaltyMap.set(ruleName, prev + breakdown.ruleNoisePenalty);
@@ -229,7 +235,11 @@ export function fractionPortfolioLinkedBoosted(
   comparisons: AlertRankingComparison[],
   alerts: AlertEvent[],
 ): number {
-  const portfolioLinked = comparisons.filter((_, i) => alerts[i]?.portfolioLinked);
+  // Build a set of portfolio-linked alert IDs for O(1) lookup
+  const portfolioLinkedIds = new Set<number>(
+    alerts.filter((a) => a.portfolioLinked).map((a) => a.id),
+  );
+  const portfolioLinked = comparisons.filter((c) => portfolioLinkedIds.has(c.alertId));
   if (portfolioLinked.length === 0) return 0;
   const boosted = portfolioLinked.filter((c) => c.scoreDelta > 0);
   return boosted.length / portfolioLinked.length;

@@ -95,6 +95,12 @@ function severityColor(s: string): string {
   return "text-green-500";
 }
 
+function adjustmentColor(delta: number): string {
+  if (delta > 0) return "text-green-400";
+  if (delta < 0) return "text-destructive";
+  return "text-muted-foreground";
+}
+
 function buildTriggerReason(alert: AlertEvent): string {
   const parts: string[] = [];
   const urgencyNum = alert.urgency ?? 0;
@@ -388,7 +394,7 @@ export function AlertDetailPanel({
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Analytics adjustment</span>
                       <span
-                        className={`font-medium ${priority.breakdown.analyticsAdjustment > 0 ? "text-green-400" : priority.breakdown.analyticsAdjustment < 0 ? "text-destructive" : "text-muted-foreground"}`}
+                        className={`font-medium ${adjustmentColor(priority.breakdown.analyticsAdjustment)}`}
                         data-testid="breakdown-analytics-adjustment"
                       >
                         {priority.breakdown.analyticsAdjustment > 0 ? "+" : ""}
