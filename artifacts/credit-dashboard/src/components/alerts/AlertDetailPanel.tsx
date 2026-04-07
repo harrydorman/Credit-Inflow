@@ -41,6 +41,7 @@ import {
   PRIORITY_BADGE_STYLES,
   ANALYST_ACTION_STYLES,
   type AnalystAction,
+  type RankingContext,
 } from "@/lib/alertPriority";
 import { useToast } from "@/hooks/use-toast";
 
@@ -55,6 +56,8 @@ interface AlertDetailPanelProps {
   onActionChange?: (id: number, action: AnalystAction) => void;
   /** Called after workflow state is successfully persisted */
   onWorkflowPersisted?: (id: number, action: AnalystAction) => void;
+  /** Optional analytics context for adjusted ranking */
+  rankingContext?: RankingContext;
 }
 
 function fmtDateTime(iso: string) {
@@ -133,6 +136,7 @@ export function AlertDetailPanel({
   action,
   onActionChange,
   onWorkflowPersisted,
+  rankingContext,
 }: AlertDetailPanelProps) {
   const [debugExpanded, setDebugExpanded] = useState(false);
   const { toast } = useToast();
@@ -154,7 +158,7 @@ export function AlertDetailPanel({
   const derivedSeverity =
     alert.severity ?? urgencyToSeverity(alert.urgency ?? null);
   const triggerReason = buildTriggerReason(alert);
-  const priority = getAlertPriority(alert);
+  const priority = getAlertPriority(alert, rankingContext);
 
   /** Toggle an analyst action: clicking the active action clears it.
    * Performs an optimistic local update, then persists to backend.
@@ -352,6 +356,9 @@ export function AlertDetailPanel({
               <Flame className="h-3.5 w-3.5 text-primary" />
               <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide font-bold">
                 Priority · Score {priority.score}/100
+                {priority.analyticsAdjusted && (
+                  <span className="ml-1 text-primary/70">· analytics-informed</span>
+                )}
               </p>
             </div>
             <p className="text-xs text-foreground" data-testid="priority-explanation">

@@ -1,10 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   useListAlertEvents,
   useMarkAlertRead,
   useMarkAlertUnread,
   useBulkMarkAlertsRead,
   getListAlertEventsQueryKey,
+  useGetAlertAnalytics,
   type AlertEvent,
   type ListAlertEventsParams,
 } from "@workspace/api-client-react";
@@ -26,7 +27,10 @@ import {
   sortAlertsByPriority,
   getPriorityLabel,
   computePriorityScore,
+  buildAnalyticsIndex,
+  buildRankingContext,
   type AnalystAction,
+  type AnalyticsIndex,
 } from "@/lib/alertPriority";
 
 // ─── AlertFeed ───────────────────────────────────────────────────────────────
@@ -52,6 +56,14 @@ function AlertFeed() {
   const markRead = useMarkAlertRead();
   const markUnread = useMarkAlertUnread();
   const bulkMarkRead = useBulkMarkAlertsRead();
+
+  // Fetch analytics for ranking context (best-effort; errors are non-blocking)
+  const { data: analyticsData } = useGetAlertAnalytics();
+
+  const analyticsIndex = useMemo<AnalyticsIndex | undefined>(() => {
+    if (!analyticsData?.rankingPrep) return undefined;
+    return buildAnalyticsIndex(analyticsData.rankingPrep);
+  }, [analyticsData]);
 
   // Build params from filters (server-side filters only).
   // Note: when unreadHighPriority is active we skip the server-side isRead
@@ -183,16 +195,22 @@ function AlertFeed() {
 
   const rawAlerts = data?.alerts ?? [];
 
+  // Build a per-alert context getter using the analytics index
+  const getCtx = analyticsIndex
+    ? (a: AlertEvent) => buildRankingContext(a, analyticsIndex)
+    : undefined;
+
   // Sort by priority (highest first) then apply client-side filters
-  const sortedAlerts = sortAlertsByPriority(rawAlerts);
+  const sortedAlerts = sortAlertsByPriority(rawAlerts, getCtx);
 
   const alerts = sortedAlerts.filter((a: AlertEvent) => {
+    const ctx = getCtx?.(a);
     if (filters.unreadHighPriority) {
-      const label = getPriorityLabel(computePriorityScore(a));
+      const label = getPriorityLabel(computePriorityScore(a, ctx));
       if (a.isRead || (label !== "Critical" && label !== "High")) return false;
     }
     if (filters.priority !== "") {
-      const label = getPriorityLabel(computePriorityScore(a));
+      const label = getPriorityLabel(computePriorityScore(a, ctx));
       if (label !== filters.priority) return false;
     }
     return true;
@@ -321,6 +339,7 @@ function AlertFeed() {
               onClick={handleRowClick}
               markReadPending={markRead.isPending}
               action={(alert.workflowAction as AnalystAction) ?? actions[alert.id] ?? null}
+              rankingContext={getCtx?.(alert)}
             />
           ))}
         </div>
@@ -337,6 +356,7 @@ function AlertFeed() {
         action={detailAlert ? ((detailAlert.workflowAction as AnalystAction) ?? actions[detailAlert.id] ?? null) : null}
         onActionChange={handleActionChange}
         onWorkflowPersisted={handleWorkflowPersisted}
+        rankingContext={detailAlert ? getCtx?.(detailAlert) : undefined}
       />
     </div>
   );

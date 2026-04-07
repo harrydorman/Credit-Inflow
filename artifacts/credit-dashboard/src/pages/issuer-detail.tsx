@@ -1,7 +1,7 @@
 import { useParams, Link } from "wouter";
 import { decodeHtml } from "@/lib/decode-html";
 import { useQuery } from "@tanstack/react-query";
-import { useListAlertEvents } from "@workspace/api-client-react";
+import { useListAlertEvents, useGetAlertAnalytics } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,7 +25,7 @@ import {
 import { formatDistanceToNow, format } from "date-fns";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { SeverityBadge, PriorityBadge } from "@/components/alerts";
-import { getAlertPriority } from "@/lib/alertPriority";
+import { getAlertPriority, buildAnalyticsIndex, buildRankingContext } from "@/lib/alertPriority";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -228,6 +228,12 @@ export default function IssuerDetail() {
     issuerName: name,
     limit: 10,
   });
+
+  // Fetch analytics for ranking context (best-effort)
+  const { data: analyticsData } = useGetAlertAnalytics();
+  const analyticsIndex = analyticsData?.rankingPrep
+    ? buildAnalyticsIndex(analyticsData.rankingPrep)
+    : undefined;
 
   if (isLoading) {
     return (
@@ -490,7 +496,10 @@ export default function IssuerDetail() {
             </h2>
             <div className="rounded-md border border-border overflow-hidden bg-card divide-y divide-border/50">
               {alertsData.alerts.map((alert) => {
-                const priority = getAlertPriority(alert);
+                const ctx = analyticsIndex
+                  ? buildRankingContext(alert, analyticsIndex)
+                  : undefined;
+                const priority = getAlertPriority(alert, ctx);
                 const isHighPriority =
                   priority.label === "Critical" || priority.label === "High";
                 return (
@@ -501,7 +510,7 @@ export default function IssuerDetail() {
                   >
                     <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
                       <SeverityBadge urgency={alert.urgency} />
-                      <PriorityBadge alert={alert} />
+                      <PriorityBadge alert={alert} rankingContext={ctx} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium leading-snug line-clamp-2">
