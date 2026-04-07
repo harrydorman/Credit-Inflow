@@ -1713,6 +1713,16 @@ components:
           type: ["integer", "null"]
         eventType:
           type: ["string", "null"]
+        confidence:
+          type: ["number", "null"]
+          description: Classification confidence score 0.0–1.0
+        severity:
+          type: ["string", "null"]
+          enum: ["high", "medium", "low", null]
+          description: Derived severity level from urgency + confidence
+        portfolioLinked:
+          type: boolean
+          description: True if this issuer is held in any portfolio for the org
         triggeredAt:
           type: string
           format: date-time

@@ -203,6 +203,13 @@ describe("ExposureAlertGroup", () => {
     expect(screen.getByText("Acme Corporation")).toBeInTheDocument();
   });
 
+  it("renders issuer link to issuer detail page", () => {
+    render(<ExposureAlertGroup group={makeExposureGroup()} />);
+    const link = screen.getByTestId("exposure-issuer-link-Acme Corporation");
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute("href", "/issuer/Acme%20Corporation");
+  });
+
   it("renders high severity count badge when > 0", () => {
     render(<ExposureAlertGroup group={makeExposureGroup()} />);
     expect(screen.getByTestId("high-count-Acme Corporation")).toBeInTheDocument();

@@ -17,6 +17,12 @@ export interface AlertEvent {
   urgency?: number | null;
   /** @nullable */
   eventType?: string | null;
+  /** Classification confidence score 0.0–1.0 @nullable */
+  confidence?: number | null;
+  /** Derived severity level @nullable */
+  severity?: "high" | "medium" | "low" | null;
+  /** True if the issuer is held in any portfolio for this org */
+  portfolioLinked?: boolean;
   triggeredAt: Date;
   isRead: boolean;
 }
