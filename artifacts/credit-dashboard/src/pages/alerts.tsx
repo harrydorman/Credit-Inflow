@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import {
   useListAlertEvents,
   useMarkAlertRead,
+  useMarkAlertUnread,
   useBulkMarkAlertsRead,
   getListAlertEventsQueryKey,
   type AlertEvent,
@@ -40,6 +41,7 @@ function AlertFeed() {
 
   // ── API hooks ─────────────────────────────────────────────────────────────
   const markRead = useMarkAlertRead();
+  const markUnread = useMarkAlertUnread();
   const bulkMarkRead = useBulkMarkAlertsRead();
 
   // Build params from filters
@@ -88,6 +90,21 @@ function AlertFeed() {
       }
     },
     [markRead, invalidate, toast],
+  );
+
+  const handleMarkUnread = useCallback(
+    async (id: number) => {
+      try {
+        await markUnread.mutateAsync({ id });
+        await invalidate();
+        setDetailAlert((prev: AlertEvent | null) =>
+          prev?.id === id ? { ...prev, isRead: false } : prev,
+        );
+      } catch {
+        toast({ title: "Failed to mark alert as unread", variant: "destructive" });
+      }
+    },
+    [markUnread, invalidate, toast],
   );
 
   const handleBulkMarkRead = useCallback(async () => {
@@ -269,7 +286,8 @@ function AlertFeed() {
         open={detailOpen}
         onClose={handleDetailClose}
         onMarkRead={handleMarkRead}
-        markReadPending={markRead.isPending}
+        onMarkUnread={handleMarkUnread}
+        markReadPending={markRead.isPending || markUnread.isPending}
       />
     </div>
   );

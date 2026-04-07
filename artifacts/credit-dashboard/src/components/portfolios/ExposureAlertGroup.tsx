@@ -151,7 +151,14 @@ export function ExposureAlertGroup({
 
         {/* Issuer name */}
         <span className="font-mono font-semibold text-sm truncate flex-1">
-          {group.issuerName}
+          <Link
+            href={`/issuer/${encodeURIComponent(group.issuerName)}`}
+            onClick={(e) => e.stopPropagation()}
+            className="hover:text-primary hover:underline transition-colors"
+            data-testid={`exposure-issuer-link-${group.issuerName}`}
+          >
+            {group.issuerName}
+          </Link>
         </span>
 
         {/* Severity counts */}
