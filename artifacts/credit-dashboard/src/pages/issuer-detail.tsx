@@ -1,9 +1,10 @@
 import { useParams, Link } from "wouter";
 import { decodeHtml } from "@/lib/decode-html";
 import { useQuery } from "@tanstack/react-query";
+import { useListAlertEvents } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -19,9 +20,12 @@ import {
   Zap,
   Shield,
   Clock,
+  ShieldAlert,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
+import { SeverityBadge, PriorityBadge } from "@/components/alerts";
+import { getAlertPriority } from "@/lib/alertPriority";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -218,6 +222,12 @@ export default function IssuerDetail() {
   const params = useParams<{ name: string }>();
   const name = decodeURIComponent(params.name ?? "");
   const { data, isLoading, error } = useIssuerDetail(name);
+
+  // Fetch recent alerts for this issuer
+  const { data: alertsData } = useListAlertEvents({
+    issuerName: name,
+    limit: 10,
+  });
 
   if (isLoading) {
     return (
@@ -464,6 +474,78 @@ export default function IssuerDetail() {
                   )}
                 </div>
               ))}
+            </div>
+          </section>
+        )}
+
+        {/* Recent Alerts Timeline */}
+        {alertsData && alertsData.alerts.length > 0 && (
+          <section data-testid="issuer-alerts-timeline">
+            <h2 className="text-lg font-bold font-mono flex items-center gap-2 mb-4">
+              <ShieldAlert className="h-5 w-5 text-primary" />
+              RECENT ALERTS
+              <span className="text-xs text-muted-foreground font-normal ml-2">
+                ({alertsData.alerts.length} recent)
+              </span>
+            </h2>
+            <div className="rounded-md border border-border overflow-hidden bg-card divide-y divide-border/50">
+              {alertsData.alerts.map((alert) => {
+                const priority = getAlertPriority(alert);
+                const isHighPriority =
+                  priority.label === "Critical" || priority.label === "High";
+                return (
+                  <div
+                    key={alert.id}
+                    className={`p-3 flex flex-wrap items-start gap-3 ${isHighPriority ? "bg-red-950/10" : ""}`}
+                    data-testid={`issuer-alert-row-${alert.id}`}
+                  >
+                    <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                      <SeverityBadge urgency={alert.urgency} />
+                      <PriorityBadge alert={alert} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium leading-snug line-clamp-2">
+                        {alert.title}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        {alert.eventType && (
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] h-4 px-1.5"
+                          >
+                            {alert.eventType}
+                          </Badge>
+                        )}
+                        {alert.portfolioLinked && (
+                          <span className="text-[10px] font-mono text-amber-500">
+                            Portfolio exposure
+                          </span>
+                        )}
+                        {!alert.isRead && (
+                          <span className="text-[10px] font-mono text-primary">
+                            Unread
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+                        {formatDistanceToNow(new Date(alert.triggeredAt), {
+                          addSuffix: true,
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-2">
+              <Link
+                href="/alerts"
+                className="text-xs font-mono text-primary hover:underline"
+              >
+                View all alerts →
+              </Link>
             </div>
           </section>
         )}

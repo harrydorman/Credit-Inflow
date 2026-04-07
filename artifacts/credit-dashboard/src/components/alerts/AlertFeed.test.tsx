@@ -6,7 +6,7 @@ import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AlertFeedFilters, DEFAULT_FILTERS, type AlertFilters } from "./AlertFeedFilters";
-import { AlertFeedRow, urgencyToSeverity, SeverityBadge } from "./AlertFeedRow";
+import { AlertFeedRow, urgencyToSeverity, SeverityBadge, PriorityBadge, ActionBadge } from "./AlertFeedRow";
 import type { AlertEvent } from "@workspace/api-client-react";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -272,4 +272,181 @@ describe("AlertFeedRow", () => {
     const row = screen.getByTestId("alert-row-1");
     expect(row.className).toContain("text-muted-foreground");
   });
+
+  it("renders priority badge", () => {
+    render(<AlertFeedRow alert={makeAlert({ urgency: 9, severity: "high" })} {...defaultProps} />);
+    expect(screen.getByTestId("priority-badge")).toBeInTheDocument();
+  });
+
+  it("applies critical row highlight for critical priority alerts", () => {
+    const criticalAlert = makeAlert({
+      urgency: 10,
+      severity: "high",
+      confidence: 1.0,
+      portfolioLinked: true,
+      isRead: false,
+    });
+    render(<AlertFeedRow alert={criticalAlert} {...defaultProps} />);
+    const row = screen.getByTestId("alert-row-1");
+    expect(row.className).toContain("border-l-red-600");
+  });
+
+  it("renders action badge when action is provided", () => {
+    render(
+      <AlertFeedRow
+        alert={makeAlert()}
+        {...defaultProps}
+        action="investigate"
+      />,
+    );
+    expect(screen.getByTestId("action-badge")).toBeInTheDocument();
+    expect(screen.getByTestId("action-badge").textContent).toContain("Investigating");
+  });
+
+  it("does not render action badge when action is null", () => {
+    render(<AlertFeedRow alert={makeAlert()} {...defaultProps} action={null} />);
+    expect(screen.queryByTestId("action-badge")).not.toBeInTheDocument();
+  });
 });
+
+// ─── AlertFeedFilters — new filters ──────────────────────────────────────────
+
+describe("AlertFeedFilters — priority and unread+high filters", () => {
+  const onChange = vi.fn();
+
+  beforeEach(() => {
+    onChange.mockClear();
+  });
+
+  it("renders priority filter dropdown", () => {
+    render(<AlertFeedFilters filters={DEFAULT_FILTERS} onChange={onChange} />);
+    expect(screen.getByTestId("filter-priority")).toBeInTheDocument();
+  });
+
+  it("renders unread+high priority filter button", () => {
+    render(<AlertFeedFilters filters={DEFAULT_FILTERS} onChange={onChange} />);
+    expect(screen.getByTestId("filter-unread-high-priority")).toBeInTheDocument();
+  });
+
+  it("calls onChange with unreadHighPriority true when button clicked", async () => {
+    render(<AlertFeedFilters filters={DEFAULT_FILTERS} onChange={onChange} />);
+    await userEvent.click(screen.getByTestId("filter-unread-high-priority"));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ unreadHighPriority: true }),
+    );
+  });
+
+  it("calls onChange with unreadHighPriority false when toggled off", async () => {
+    render(
+      <AlertFeedFilters
+        filters={{ ...DEFAULT_FILTERS, unreadHighPriority: true }}
+        onChange={onChange}
+      />,
+    );
+    await userEvent.click(screen.getByTestId("filter-unread-high-priority"));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ unreadHighPriority: false }),
+    );
+  });
+
+  it("shows clear button when priority filter is active", () => {
+    render(
+      <AlertFeedFilters
+        filters={{ ...DEFAULT_FILTERS, priority: "High" }}
+        onChange={onChange}
+      />,
+    );
+    expect(screen.getByTestId("filter-clear")).toBeInTheDocument();
+  });
+
+  it("shows clear button when unreadHighPriority is active", () => {
+    render(
+      <AlertFeedFilters
+        filters={{ ...DEFAULT_FILTERS, unreadHighPriority: true }}
+        onChange={onChange}
+      />,
+    );
+    expect(screen.getByTestId("filter-clear")).toBeInTheDocument();
+  });
+
+  it("clears priority and unreadHighPriority on clear", async () => {
+    render(
+      <AlertFeedFilters
+        filters={{ ...DEFAULT_FILTERS, priority: "Critical", unreadHighPriority: true }}
+        onChange={onChange}
+      />,
+    );
+    await userEvent.click(screen.getByTestId("filter-clear"));
+    expect(onChange).toHaveBeenCalledWith(DEFAULT_FILTERS);
+  });
+});
+
+// ─── ActionBadge ──────────────────────────────────────────────────────────────
+
+describe("ActionBadge", () => {
+  it("renders Investigating for investigate action", () => {
+    render(<ActionBadge action="investigate" />);
+    expect(screen.getByTestId("action-badge")).toBeInTheDocument();
+    expect(screen.getByText("Investigating")).toBeInTheDocument();
+  });
+
+  it("renders Monitoring for monitor action", () => {
+    render(<ActionBadge action="monitor" />);
+    expect(screen.getByText("Monitoring")).toBeInTheDocument();
+  });
+
+  it("renders Ignored for ignore action", () => {
+    render(<ActionBadge action="ignore" />);
+    expect(screen.getByText("Ignored")).toBeInTheDocument();
+  });
+
+  it("renders nothing for null action", () => {
+    const { container } = render(<ActionBadge action={null} />);
+    expect(container.firstChild).toBeNull();
+  });
+});
+
+// ─── PriorityBadge ────────────────────────────────────────────────────────────
+
+describe("PriorityBadge", () => {
+  const makeAlertFull = (overrides: Partial<AlertEvent> = {}): AlertEvent => ({
+    id: 1,
+    alertRuleId: 10,
+    watchlistId: 5,
+    articleId: 42,
+    issuerName: "Acme Corp",
+    title: "Test",
+    urgency: 9,
+    confidence: 0.9,
+    severity: "high",
+    portfolioLinked: true,
+    eventType: "downgrade",
+    triggeredAt: new Date("2024-01-15T10:30:00Z").toISOString(),
+    isRead: false,
+    ...overrides,
+  });
+
+  it("renders a priority badge for any alert", () => {
+    render(<PriorityBadge alert={makeAlertFull()} />);
+    expect(screen.getByTestId("priority-badge")).toBeInTheDocument();
+  });
+
+  it("shows Critical for max-signal alert", () => {
+    render(
+      <PriorityBadge
+        alert={makeAlertFull({ severity: "high", confidence: 1.0, portfolioLinked: true, urgency: 10 })}
+      />,
+    );
+    expect(screen.getByText("Critical")).toBeInTheDocument();
+  });
+
+  it("shows Low for minimal-signal alert", () => {
+    render(
+      <PriorityBadge
+        alert={makeAlertFull({ severity: "low", confidence: 0.1, portfolioLinked: false, urgency: 1 })}
+      />,
+    );
+    expect(screen.getByText("Low")).toBeInTheDocument();
+  });
+});
+
