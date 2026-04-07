@@ -44,7 +44,8 @@ function fmtDateTime(iso: string) {
 }
 
 function formatEventType(eventType: string): string {
-  return eventType.replace(/_/g, " ");
+  const formatted = eventType.replace(/_/g, " ").trim();
+  return formatted || eventType;
 }
 
 function confidenceLabel(c: number): string {
@@ -70,7 +71,7 @@ function buildTriggerReason(alert: AlertEvent): string {
   const urgencyNum = alert.urgency ?? 0;
   const confNum = alert.confidence ?? 0;
 
-  if (alert.eventType) {
+  if (alert.eventType && alert.eventType.trim()) {
     parts.push(
       `A ${formatEventType(alert.eventType)} event was detected for ${alert.issuerName}.`,
     );
