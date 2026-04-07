@@ -3,15 +3,22 @@
  *
  * Phase 10: Internal ranking evaluation page.
  * Phase 11: Ranking Calibration + Time-Windowed Evaluation.
+ * Phase 12: Ranking Calibration Recommendations + Historical Evaluation Snapshots.
  *
  * Compares baseline vs analytics-informed scores for alerts in the selected
- * time window, showing aggregate calibration metrics and per-alert breakdowns.
+ * time window, showing aggregate calibration metrics, recommendations, snapshot
+ * history, and per-alert breakdowns.
  * This is an admin/internal page — not linked in the main navigation.
  */
 
-import { useMemo, useState } from "react";
-import { useListAlertEvents, useGetAlertAnalytics } from "@workspace/api-client-react";
-import type { AlertEvent } from "@workspace/api-client-react";
+import { useMemo, useState, useCallback } from "react";
+import {
+  useListAlertEvents,
+  useGetAlertAnalytics,
+  useCreateRankingEvalSnapshot,
+  useListRankingEvalSnapshots,
+} from "@workspace/api-client-react";
+import type { AlertEvent, RankingEvalSnapshot } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -26,10 +33,25 @@ import {
   computeRankingMetrics,
   filterAlertsByTimeWindow,
   type AlertRankingComparison,
+  type RankingAggregateMetrics,
+  type TrendMetrics,
   type TimeWindow,
   TIME_WINDOW_LABELS,
 } from "@/lib/rankingEvaluation";
-import { TrendingUp, TrendingDown, Minus, BarChart2, AlertCircle, Settings2 } from "lucide-react";
+import { getAllRecommendations } from "@/lib/rankingRecommendations";
+import { compareSnapshots } from "@/lib/snapshotComparison";
+import {
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  BarChart2,
+  AlertCircle,
+  Settings2,
+  Camera,
+  History,
+  Lightbulb,
+  ArrowRightLeft,
+} from "lucide-react";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -49,6 +71,36 @@ function DeltaIcon({ delta }: { delta: number }) {
 
 function pct(n: number): string {
   return `${Math.round(n * 100)}%`;
+}
+
+/**
+ * Build snapshot metrics from aggregate metrics and optional trend metrics.
+ *
+ * The three feedback-rate fields (usefulFeedbackRateAmongBoosted,
+ * noiseRateAmongPenalised, investigateRateAmongPortfolioLinkedBoosted) come
+ * from TrendMetrics, which requires feedback predicate functions not available
+ * in the page at this stage.  When no trend is provided they default to 0 to
+ * indicate "not measured", which the snapshot comparison surface correctly as
+ * "unchanged" rather than worsened.
+ */
+
+function metricsFromAggregate(
+  m: RankingAggregateMetrics,
+  trend?: TrendMetrics | null,
+) {
+  return {
+    totalAlerts: m.totalAlerts,
+    adjustedFraction: m.adjustedFraction,
+    averagePositiveAdjustment: m.averagePositiveAdjustment,
+    averageNegativeAdjustment: m.averageNegativeAdjustment,
+    // Populated from trend metrics when available; 0 = "not measured"
+    usefulFeedbackRateAmongBoosted: trend?.usefulFeedbackRateAmongBoosted ?? 0,
+    noiseRateAmongPenalised: trend?.noiseRateAmongPenalised ?? 0,
+    investigateRateAmongPortfolioLinkedBoosted:
+      trend?.investigateRateAmongPortfolioLinkedBoosted ?? 0,
+    topBoostedEventTypes: m.topBoostedEventTypes,
+    topPenalisedRules: m.topPenalisedRules,
+  };
 }
 
 // ─── sub-components ───────────────────────────────────────────────────────────
@@ -185,14 +237,202 @@ function TimeWindowSelector({
   );
 }
 
+// ─── recommendations panel ────────────────────────────────────────────────────
+
+function RecommendationsPanel({ metrics }: { metrics: RankingAggregateMetrics }) {
+  const recs = useMemo(() => getAllRecommendations(metrics), [metrics]);
+
+  if (recs.length === 0) return null;
+
+  const severityStyles: Record<string, string> = {
+    action: "border-destructive/50 bg-destructive/5 text-destructive",
+    warning: "border-amber-500/50 bg-amber-950/10 text-amber-400",
+    info: "border-border bg-secondary/10 text-muted-foreground",
+  };
+
+  return (
+    <div data-testid="recommendations-panel">
+      <div className="flex items-center gap-1.5 mb-2">
+        <Lightbulb className="h-3.5 w-3.5 text-amber-400" />
+        <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
+          Calibration recommendations
+        </p>
+        <span className="text-[10px] font-mono text-muted-foreground">
+          ({recs.length})
+        </span>
+      </div>
+      <div className="space-y-2" data-testid="recommendations-list">
+        {recs.map((rec, i) => (
+          <div
+            key={i}
+            className={`rounded-md border px-3 py-2.5 space-y-1 ${severityStyles[rec.severity] ?? severityStyles.info}`}
+            data-testid={`recommendation-item-${rec.severity}`}
+          >
+            <p className="text-[11px] font-mono font-semibold">{rec.title}</p>
+            <p className="text-[11px] font-mono opacity-80">{rec.detail}</p>
+            <p className="text-[11px] font-mono opacity-70">
+              <span className="font-semibold">Suggestion:</span> {rec.suggestion}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── snapshot comparison panel ────────────────────────────────────────────────
+
+function SnapshotComparisonPanel({
+  currentMetrics,
+  snapshot,
+  timeWindow,
+}: {
+  currentMetrics: RankingAggregateMetrics;
+  snapshot: RankingEvalSnapshot;
+  timeWindow: TimeWindow;
+}) {
+  const comparison = useMemo(
+    () =>
+      compareSnapshots(
+        snapshot.metricsJson,
+        metricsFromAggregate(currentMetrics),
+        snapshot.rankingModelVersion,
+        RANKING_MODEL_VERSION,
+        TIME_WINDOW_LABELS[timeWindow],
+      ),
+    [currentMetrics, snapshot, timeWindow],
+  );
+
+  const assessmentStyle: Record<string, string> = {
+    improved: "text-green-400",
+    worsened: "text-destructive",
+    mixed: "text-amber-400",
+    unchanged: "text-muted-foreground",
+  };
+
+  const signalKeys = [
+    { key: "usefulFeedbackRateAmongBoosted" as const, label: "Useful feedback rate (boosted)" },
+    { key: "noiseRateAmongPenalised" as const, label: "Noise rate (penalised)" },
+    { key: "investigateRateAmongPortfolioLinkedBoosted" as const, label: "Investigate rate (portfolio-linked)" },
+  ];
+
+  return (
+    <div
+      className="rounded-md border border-border bg-secondary/10 px-4 py-3 space-y-3"
+      data-testid="snapshot-comparison-panel"
+    >
+      <div className="flex items-center gap-1.5">
+        <ArrowRightLeft className="h-3.5 w-3.5 text-muted-foreground" />
+        <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
+          Comparison vs snapshot {snapshot.id} ({snapshot.rankingModelVersion} ·{" "}
+          {new Date(snapshot.createdAt).toLocaleDateString()})
+        </p>
+        <span
+          className={`text-[10px] font-mono font-semibold ml-auto ${assessmentStyle[comparison.overallAssessment]}`}
+          data-testid="comparison-overall-assessment"
+        >
+          {comparison.overallAssessment}
+        </span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {signalKeys.map(({ key, label }) => {
+          const d = comparison.signalDeltas[key];
+          return (
+            <div key={key} className="space-y-0.5 text-[11px] font-mono">
+              <p className="text-muted-foreground">{label}</p>
+              <div className="flex items-center gap-1">
+                <span className="text-foreground">{pct(d.currentValue)}</span>
+                <DeltaIcon delta={d.direction === "improved" ? 1 : d.direction === "worsened" ? -1 : 0} />
+                <span
+                  className={
+                    d.direction === "improved"
+                      ? "text-green-400"
+                      : d.direction === "worsened"
+                        ? "text-destructive"
+                        : "text-muted-foreground"
+                  }
+                >
+                  {d.delta >= 0 ? "+" : ""}
+                  {pct(d.delta)} vs snapshot
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── snapshots panel ──────────────────────────────────────────────────────────
+
+function SnapshotsPanel({ timeWindow }: { timeWindow: TimeWindow }) {
+  const { data, isLoading, refetch } = useListRankingEvalSnapshots({ timeWindow });
+  const snapshots = data?.snapshots ?? [];
+
+  return (
+    <div data-testid="snapshots-panel">
+      <div className="flex items-center gap-1.5 mb-2">
+        <History className="h-3.5 w-3.5 text-muted-foreground" />
+        <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
+          Recent snapshots · {TIME_WINDOW_LABELS[timeWindow]}
+        </p>
+        <button
+          onClick={() => refetch()}
+          className="ml-auto text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+          data-testid="refresh-snapshots-button"
+        >
+          refresh
+        </button>
+      </div>
+      {isLoading && (
+        <p className="text-[11px] font-mono text-muted-foreground animate-pulse">
+          Loading snapshots…
+        </p>
+      )}
+      {!isLoading && snapshots.length === 0 && (
+        <p className="text-[11px] font-mono text-muted-foreground" data-testid="no-snapshots-message">
+          No snapshots saved yet for this window.
+        </p>
+      )}
+      {!isLoading && snapshots.length > 0 && (
+        <div className="space-y-1" data-testid="snapshots-list">
+          {snapshots.slice(0, 5).map((s) => (
+            <div
+              key={s.id}
+              className="flex items-center justify-between text-[11px] font-mono py-1 border-b border-border/30"
+              data-testid={`snapshot-row-${s.id}`}
+            >
+              <span className="text-muted-foreground">
+                #{s.id} · {s.rankingModelVersion} · {s.snapshotType}
+              </span>
+              <span className="text-foreground">
+                {pct(s.metricsJson.adjustedFraction)} adj ·{" "}
+                {s.metricsJson.totalAlerts} alerts ·{" "}
+                {new Date(s.createdAt).toLocaleDateString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── page ─────────────────────────────────────────────────────────────────────
 
 export default function RankingEvalPage() {
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("all");
+  const [snapshotSaved, setSnapshotSaved] = useState(false);
 
   const { data: alertsData, isLoading: alertsLoading } = useListAlertEvents({ limit: 500 });
   const { data: analyticsData, isLoading: analyticsLoading } =
     useGetAlertAnalytics();
+  const { data: snapshotsData, refetch: refetchSnapshots } = useListRankingEvalSnapshots(
+    { timeWindow },
+  );
+
+  const createSnapshot = useCreateRankingEvalSnapshot();
 
   const alerts: AlertEvent[] = useMemo(
     () => alertsData?.alerts ?? [],
@@ -232,6 +472,24 @@ export default function RankingEvalPage() {
   const unchanged = comparisons.filter((c) => c.scoreDelta === 0);
 
   const isLoading = alertsLoading || analyticsLoading;
+
+  // Most recent snapshot for the current window (for side-by-side comparison)
+  const mostRecentSnapshot: RankingEvalSnapshot | null = useMemo(() => {
+    const snaps = snapshotsData?.snapshots ?? [];
+    return snaps.length > 0 ? snaps[0] : null;
+  }, [snapshotsData]);
+
+  const handleSaveSnapshot = useCallback(async () => {
+    if (metrics.totalAlerts === 0) return;
+    await createSnapshot.mutateAsync({
+      rankingModelVersion: RANKING_MODEL_VERSION,
+      timeWindow,
+      metrics: metricsFromAggregate(metrics),
+    });
+    setSnapshotSaved(true);
+    refetchSnapshots();
+    setTimeout(() => setSnapshotSaved(false), 3000);
+  }, [metrics, timeWindow, createSnapshot, refetchSnapshots]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -297,11 +555,22 @@ export default function RankingEvalPage() {
 
         {!isLoading && windowedAlerts.length > 0 && (
           <>
-            {/* Aggregate metrics */}
+            {/* Aggregate metrics + save snapshot button */}
             <div>
-              <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide mb-2">
-                Aggregate metrics · {TIME_WINDOW_LABELS[timeWindow]}
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
+                  Aggregate metrics · {TIME_WINDOW_LABELS[timeWindow]}
+                </p>
+                <button
+                  onClick={handleSaveSnapshot}
+                  disabled={createSnapshot.isPending}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono border border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors disabled:opacity-50"
+                  data-testid="save-snapshot-button"
+                >
+                  <Camera className="h-3 w-3" />
+                  {snapshotSaved ? "Saved!" : createSnapshot.isPending ? "Saving…" : "Save snapshot"}
+                </button>
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <MetricCard
                   label="Alerts evaluated"
@@ -332,6 +601,18 @@ export default function RankingEvalPage() {
                 />
               </div>
             </div>
+
+            {/* Recommendations */}
+            <RecommendationsPanel metrics={metrics} />
+
+            {/* Snapshot comparison */}
+            {mostRecentSnapshot && (
+              <SnapshotComparisonPanel
+                currentMetrics={metrics}
+                snapshot={mostRecentSnapshot}
+                timeWindow={timeWindow}
+              />
+            )}
 
             {/* Top boosted event types + top penalised rules */}
             {(metrics.topBoostedEventTypes.length > 0 ||
@@ -382,6 +663,11 @@ export default function RankingEvalPage() {
                 )}
               </div>
             )}
+
+            <Separator />
+
+            {/* Recent snapshots */}
+            <SnapshotsPanel timeWindow={timeWindow} />
 
             <Separator />
 

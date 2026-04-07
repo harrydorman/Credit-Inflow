@@ -886,3 +886,43 @@ export type AlertAnalytics = {
     }[];
   };
 };
+
+// ---------------------------------------------------------------------------
+// Ranking evaluation snapshots (Phase 12)
+// ---------------------------------------------------------------------------
+
+export type RankingSnapshotTimeWindow = "7d" | "30d" | "all";
+export type RankingSnapshotType = "manual" | "scheduled";
+
+export interface RankingSnapshotMetrics {
+  totalAlerts: number;
+  adjustedFraction: number;
+  averagePositiveAdjustment: number;
+  averageNegativeAdjustment: number;
+  usefulFeedbackRateAmongBoosted: number;
+  noiseRateAmongPenalised: number;
+  investigateRateAmongPortfolioLinkedBoosted: number;
+  topBoostedEventTypes: { eventType: string; totalBoost: number }[];
+  topPenalisedRules: { ruleName: string; totalPenalty: number }[];
+}
+
+export interface RankingEvalSnapshot {
+  id: number;
+  organizationId: string;
+  rankingModelVersion: string;
+  timeWindow: RankingSnapshotTimeWindow;
+  snapshotType: RankingSnapshotType;
+  metricsJson: RankingSnapshotMetrics;
+  createdAt: string;
+}
+
+export interface CreateRankingEvalSnapshotRequest {
+  rankingModelVersion: string;
+  timeWindow: RankingSnapshotTimeWindow;
+  snapshotType?: RankingSnapshotType;
+  metrics: RankingSnapshotMetrics;
+}
+
+export interface RankingEvalSnapshotList {
+  snapshots: RankingEvalSnapshot[];
+}
