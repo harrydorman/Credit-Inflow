@@ -9,8 +9,6 @@
  * local testing).
  */
 
-declare const __VITE_ORG_ID__: string | undefined;
-
 /** Organization ID used for all API calls. */
 export function getOrgId(): string {
   // In Vite, import.meta.env is the standard mechanism; fall back to a
