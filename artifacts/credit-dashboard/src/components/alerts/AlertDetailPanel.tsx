@@ -156,7 +156,9 @@ export function AlertDetailPanel({
   const triggerReason = buildTriggerReason(alert);
   const priority = getAlertPriority(alert);
 
-  /** Toggle an analyst action: clicking the active action clears it. Persists to backend. */
+  /** Toggle an analyst action: clicking the active action clears it.
+   * Performs an optimistic local update, then persists to backend.
+   * On failure, reverts the optimistic update and shows a toast. */
   async function handleActionToggle(targetAction: NonNullable<AnalystAction>) {
     const nextAction = persistedAction === targetAction ? null : targetAction;
 
