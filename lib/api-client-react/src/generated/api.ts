@@ -18,6 +18,7 @@ import type {
 
 import type {
   AddWatchlistItemRequest,
+  AlertAnalytics,
   AlertEvent,
   AlertEventList,
   AlertFeedback,
@@ -3158,3 +3159,72 @@ export const useClearAlertWorkflowState = <
 > => {
   return useMutation(getClearAlertWorkflowStateMutationOptions(options));
 };
+
+// ---------------------------------------------------------------------------
+// Analytics
+// ---------------------------------------------------------------------------
+
+/**
+ * @summary Get workflow + feedback analytics for the authenticated org
+ */
+export const getAlertAnalyticsUrl = () => `/api/analytics/alerts`;
+
+export const getAlertAnalytics = async (
+  options?: RequestInit,
+): Promise<AlertAnalytics> => {
+  return customFetch<AlertAnalytics>(getAlertAnalyticsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getAlertAnalyticsQueryKey = () =>
+  [`/api/analytics/alerts`] as const;
+
+export const getAlertAnalyticsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAlertAnalytics>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAlertAnalytics>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getAlertAnalyticsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAlertAnalytics>>> =
+    ({ signal }) => getAlertAnalytics({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAlertAnalytics>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAlertAnalyticsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAlertAnalytics>>
+>;
+export type GetAlertAnalyticsQueryError = ErrorType<unknown>;
+
+export function useGetAlertAnalytics<
+  TData = Awaited<ReturnType<typeof getAlertAnalytics>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAlertAnalytics>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getAlertAnalyticsQueryOptions(options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOptions.queryKey };
+}

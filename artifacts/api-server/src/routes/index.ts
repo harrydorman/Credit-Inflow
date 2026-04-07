@@ -12,6 +12,7 @@ import watchlistsRouter from "./watchlists";
 import alertsRouter from "./alerts";
 import portfoliosRouter from "./portfolios";
 import notificationsRouter from "./notifications";
+import analyticsRouter from "./analytics";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(watchlistsRouter);
 router.use(alertsRouter);
 router.use(portfoliosRouter);
 router.use(notificationsRouter);
+router.use(analyticsRouter);
 
 export default router;
