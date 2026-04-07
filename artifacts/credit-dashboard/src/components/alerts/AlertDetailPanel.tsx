@@ -9,7 +9,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import type { AlertEvent } from "@workspace/api-client-react";
+import {
+  useSubmitAlertFeedback,
+  useUpsertAlertWorkflowState,
+  useClearAlertWorkflowState,
+  type AlertEvent,
+  type AlertFeedbackRating,
+  AlertWorkflowAction,
+} from "@workspace/api-client-react";
 import { SeverityBadge, urgencyToSeverity } from "./AlertFeedRow";
 import { Link } from "wouter";
 import {
@@ -25,6 +32,9 @@ import {
   Eye,
   EyeOff,
   Flame,
+  ThumbsUp,
+  ThumbsDown,
+  Clock,
 } from "lucide-react";
 import {
   getAlertPriority,
@@ -32,6 +42,7 @@ import {
   ANALYST_ACTION_STYLES,
   type AnalystAction,
 } from "@/lib/alertPriority";
+import { useToast } from "@/hooks/use-toast";
 
 interface AlertDetailPanelProps {
   alert: AlertEvent | null;
@@ -42,6 +53,8 @@ interface AlertDetailPanelProps {
   markReadPending: boolean;
   action?: AnalystAction;
   onActionChange?: (id: number, action: AnalystAction) => void;
+  /** Called after workflow state is successfully persisted */
+  onWorkflowPersisted?: (id: number, action: AnalystAction) => void;
 }
 
 function fmtDateTime(iso: string) {
@@ -119,10 +132,23 @@ export function AlertDetailPanel({
   markReadPending,
   action,
   onActionChange,
+  onWorkflowPersisted,
 }: AlertDetailPanelProps) {
   const [debugExpanded, setDebugExpanded] = useState(false);
+  const { toast } = useToast();
+
+  const upsertWorkflow = useUpsertAlertWorkflowState();
+  const clearWorkflow = useClearAlertWorkflowState();
+  const submitFeedback = useSubmitAlertFeedback();
 
   if (!alert) return null;
+
+  // Use persisted workflowAction from the alert if available, otherwise fall back to prop
+  const persistedAction: AnalystAction =
+    (alert.workflowAction as AnalystAction) ?? action ?? null;
+
+  const persistedFeedback: AlertFeedbackRating | null =
+    (alert.feedbackRating as AlertFeedbackRating) ?? null;
 
   const isPortfolioLinked = Boolean(alert.portfolioLinked);
   const derivedSeverity =
@@ -130,10 +156,44 @@ export function AlertDetailPanel({
   const triggerReason = buildTriggerReason(alert);
   const priority = getAlertPriority(alert);
 
-  /** Toggle an analyst action: clicking the active action clears it. */
-  function handleActionToggle(targetAction: NonNullable<AnalystAction>) {
-    if (!onActionChange) return;
-    onActionChange(alert!.id, action === targetAction ? null : targetAction);
+  /** Toggle an analyst action: clicking the active action clears it. Persists to backend. */
+  async function handleActionToggle(targetAction: NonNullable<AnalystAction>) {
+    const nextAction = persistedAction === targetAction ? null : targetAction;
+
+    // Optimistic local update
+    if (onActionChange) {
+      onActionChange(alert!.id, nextAction);
+    }
+
+    try {
+      if (nextAction === null) {
+        await clearWorkflow.mutateAsync({ id: alert!.id });
+      } else {
+        await upsertWorkflow.mutateAsync({
+          id: alert!.id,
+          data: { action: AlertWorkflowAction[nextAction] },
+        });
+      }
+      if (onWorkflowPersisted) {
+        onWorkflowPersisted(alert!.id, nextAction);
+      }
+    } catch {
+      // Revert optimistic update on failure
+      if (onActionChange) {
+        onActionChange(alert!.id, persistedAction);
+      }
+      toast({ title: "Failed to save workflow action", variant: "destructive" });
+    }
+  }
+
+  /** Submit feedback rating. Clicking the active rating clears it by re-submitting (API upserts). */
+  async function handleFeedbackSubmit(rating: AlertFeedbackRating) {
+    try {
+      await submitFeedback.mutateAsync({ id: alert!.id, data: { rating } });
+      toast({ title: "Feedback saved" });
+    } catch {
+      toast({ title: "Failed to save feedback", variant: "destructive" });
+    }
   }
 
   return (
@@ -161,12 +221,12 @@ export function AlertDetailPanel({
                 UNREAD
               </Badge>
             )}
-            {action && (
+            {persistedAction && (
               <Badge
-                className={`text-[10px] h-4 px-1.5 font-mono border ${ANALYST_ACTION_STYLES[action]}`}
+                className={`text-[10px] h-4 px-1.5 font-mono border ${ANALYST_ACTION_STYLES[persistedAction]}`}
                 data-testid="action-state-badge"
               >
-                {action.toUpperCase()}
+                {persistedAction.toUpperCase()}
               </Badge>
             )}
             {isPortfolioLinked && (
@@ -306,9 +366,10 @@ export function AlertDetailPanel({
               <div className="flex gap-2 flex-wrap">
                 <Button
                   size="sm"
-                  variant={action === "investigate" ? "default" : "outline"}
+                  variant={persistedAction === "investigate" ? "default" : "outline"}
                   className="h-7 text-xs font-mono"
                   onClick={() => handleActionToggle("investigate")}
+                  disabled={upsertWorkflow.isPending || clearWorkflow.isPending}
                   data-testid="action-btn-investigate"
                 >
                   <TrendingUp className="h-3 w-3 mr-1" />
@@ -316,9 +377,10 @@ export function AlertDetailPanel({
                 </Button>
                 <Button
                   size="sm"
-                  variant={action === "monitor" ? "default" : "outline"}
+                  variant={persistedAction === "monitor" ? "default" : "outline"}
                   className="h-7 text-xs font-mono"
                   onClick={() => handleActionToggle("monitor")}
+                  disabled={upsertWorkflow.isPending || clearWorkflow.isPending}
                   data-testid="action-btn-monitor"
                 >
                   <Eye className="h-3 w-3 mr-1" />
@@ -326,9 +388,10 @@ export function AlertDetailPanel({
                 </Button>
                 <Button
                   size="sm"
-                  variant={action === "ignore" ? "secondary" : "outline"}
+                  variant={persistedAction === "ignore" ? "secondary" : "outline"}
                   className="h-7 text-xs font-mono"
                   onClick={() => handleActionToggle("ignore")}
+                  disabled={upsertWorkflow.isPending || clearWorkflow.isPending}
                   data-testid="action-btn-ignore"
                 >
                   <EyeOff className="h-3 w-3 mr-1" />
@@ -337,6 +400,48 @@ export function AlertDetailPanel({
               </div>
             </div>
           )}
+
+          {/* Feedback */}
+          <div data-testid="feedback-section">
+            <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide mb-2">
+              Signal feedback
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant={persistedFeedback === "useful" ? "default" : "outline"}
+                className="h-7 text-xs font-mono"
+                onClick={() => handleFeedbackSubmit("useful")}
+                disabled={submitFeedback.isPending}
+                data-testid="feedback-btn-useful"
+              >
+                <ThumbsUp className="h-3 w-3 mr-1" />
+                Useful
+              </Button>
+              <Button
+                size="sm"
+                variant={persistedFeedback === "noise" ? "secondary" : "outline"}
+                className="h-7 text-xs font-mono"
+                onClick={() => handleFeedbackSubmit("noise")}
+                disabled={submitFeedback.isPending}
+                data-testid="feedback-btn-noise"
+              >
+                <ThumbsDown className="h-3 w-3 mr-1" />
+                Noise
+              </Button>
+              <Button
+                size="sm"
+                variant={persistedFeedback === "investigate_later" ? "default" : "outline"}
+                className="h-7 text-xs font-mono"
+                onClick={() => handleFeedbackSubmit("investigate_later")}
+                disabled={submitFeedback.isPending}
+                data-testid="feedback-btn-investigate-later"
+              >
+                <Clock className="h-3 w-3 mr-1" />
+                Later
+              </Button>
+            </div>
+          </div>
 
           {/* Confidence breakdown */}
           {alert.confidence != null && (

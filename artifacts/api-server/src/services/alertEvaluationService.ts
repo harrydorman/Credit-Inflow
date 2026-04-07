@@ -19,12 +19,14 @@ import {
   articlesTable,
   alertRulesTable,
   alertEventsTable,
+  alertFeedbackTable,
+  alertWorkflowStateTable,
   watchlistItemsTable,
   portfolioIssuerMapTable,
   portfolioHoldingsTable,
   portfoliosTable,
 } from "@workspace/db";
-import { and, eq, inArray, or, gte, lte, desc, count } from "drizzle-orm";
+import { and, eq, inArray, or, gte, lte, desc, count, isNull, isNotNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
 // ---------------------------------------------------------------------------
@@ -400,18 +402,34 @@ export interface AlertsFilter {
   portfolioLinked?: boolean;
   dateFrom?: Date;
   dateTo?: Date;
+  /**
+   * Filter by analyst workflow action.
+   * "unassigned" returns alerts that have no workflow state set.
+   */
+  action?: "investigate" | "monitor" | "ignore" | "unassigned";
+  /** When provided, include per-user workflow and feedback state in each alert. */
+  userId?: string;
   limit?: number;
   offset?: number;
 }
 
 export interface AlertsPage {
-  alerts: Array<typeof alertEventsTable.$inferSelect & { portfolioLinked: boolean }>;
+  alerts: Array<
+    typeof alertEventsTable.$inferSelect & {
+      portfolioLinked: boolean;
+      workflowAction: "investigate" | "monitor" | "ignore" | null;
+      feedbackRating: "useful" | "noise" | "investigate_later" | null;
+    }
+  >;
   total: number;
 }
 
 /**
  * Returns alert events for an organization with optional filters and pagination.
  * Org safety: joins alertEvents → alertRules and filters by organizationId.
+ *
+ * When filters.action is provided, the result is filtered by workflow action.
+ * "unassigned" returns alerts with no workflow state for the org.
  */
 export async function getAlertsForOrganization(
   orgId: string,
@@ -424,6 +442,7 @@ export async function getAlertsForOrganization(
     isRead,
     dateFrom,
     dateTo,
+    action,
     limit = 50,
     offset = 0,
   } = filters;
@@ -450,6 +469,13 @@ export async function getAlertsForOrganization(
   }
   if (dateTo !== undefined) {
     conditions.push(lte(alertEventsTable.triggeredAt, dateTo));
+  }
+
+  // Workflow action filter — applied after join
+  if (action === "unassigned") {
+    conditions.push(isNull(alertWorkflowStateTable.id));
+  } else if (action !== undefined) {
+    conditions.push(eq(alertWorkflowStateTable.action, action));
   }
 
   const where = and(...conditions);
@@ -485,9 +511,25 @@ export async function getAlertsForOrganization(
         severity: alertEventsTable.severity,
         triggeredAt: alertEventsTable.triggeredAt,
         isRead: alertEventsTable.isRead,
+        workflowAction: alertWorkflowStateTable.action,
+        feedbackRating: alertFeedbackTable.rating,
       })
       .from(alertEventsTable)
       .innerJoin(alertRulesTable, eq(alertEventsTable.alertRuleId, alertRulesTable.id))
+      .leftJoin(
+        alertWorkflowStateTable,
+        and(
+          eq(alertWorkflowStateTable.alertEventId, alertEventsTable.id),
+          eq(alertWorkflowStateTable.organizationId, orgId),
+        ),
+      )
+      .leftJoin(
+        alertFeedbackTable,
+        and(
+          eq(alertFeedbackTable.alertEventId, alertEventsTable.id),
+          eq(alertFeedbackTable.organizationId, orgId),
+        ),
+      )
       .where(where)
       .orderBy(desc(alertEventsTable.triggeredAt))
       .limit(limit)
@@ -496,6 +538,13 @@ export async function getAlertsForOrganization(
       .select({ value: count() })
       .from(alertEventsTable)
       .innerJoin(alertRulesTable, eq(alertEventsTable.alertRuleId, alertRulesTable.id))
+      .leftJoin(
+        alertWorkflowStateTable,
+        and(
+          eq(alertWorkflowStateTable.alertEventId, alertEventsTable.id),
+          eq(alertWorkflowStateTable.organizationId, orgId),
+        ),
+      )
       .where(where),
   ]);
 
@@ -503,6 +552,8 @@ export async function getAlertsForOrganization(
   const tagged = rows.map((r) => ({
     ...r,
     portfolioLinked: portfolioIssuerSet.has(r.issuerName),
+    workflowAction: r.workflowAction ?? null,
+    feedbackRating: r.feedbackRating ?? null,
   }));
 
   const finalAlerts =

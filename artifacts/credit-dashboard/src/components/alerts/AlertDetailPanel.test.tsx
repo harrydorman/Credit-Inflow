@@ -7,6 +7,33 @@ import userEvent from "@testing-library/user-event";
 import { AlertDetailPanel } from "./AlertDetailPanel";
 import type { AlertEvent } from "@workspace/api-client-react";
 
+// ─── mock API hooks used by AlertDetailPanel ──────────────────────────────────
+
+vi.mock("@workspace/api-client-react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@workspace/api-client-react")>();
+  return {
+    ...actual,
+    useSubmitAlertFeedback: vi.fn(() => ({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+      isPending: false,
+    })),
+    useUpsertAlertWorkflowState: vi.fn(() => ({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+      isPending: false,
+    })),
+    useClearAlertWorkflowState: vi.fn(() => ({
+      mutateAsync: vi.fn().mockResolvedValue(undefined),
+      isPending: false,
+    })),
+  };
+});
+
+// ─── mock use-toast ────────────────────────────────────────────────────────────
+
+vi.mock("@/hooks/use-toast", () => ({
+  useToast: () => ({ toast: vi.fn() }),
+}));
+
 // ─── mock wouter ─────────────────────────────────────────────────────────────
 
 vi.mock("wouter", () => ({
@@ -445,5 +472,151 @@ describe("AlertDetailPanel", () => {
       />,
     );
     expect(screen.queryByTestId("action-state-badge")).not.toBeInTheDocument();
+  });
+});
+
+// ─── feedback section ─────────────────────────────────────────────────────────
+
+describe("AlertDetailPanel — feedback section", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders feedback section with Useful, Noise, and Later buttons", () => {
+    render(<AlertDetailPanel {...defaultProps} alert={makeAlert()} />);
+    expect(screen.getByTestId("feedback-section")).toBeInTheDocument();
+    expect(screen.getByTestId("feedback-btn-useful")).toBeInTheDocument();
+    expect(screen.getByTestId("feedback-btn-noise")).toBeInTheDocument();
+    expect(screen.getByTestId("feedback-btn-investigate-later")).toBeInTheDocument();
+  });
+
+  it("calls submitFeedback.mutateAsync with 'useful' when Useful is clicked", async () => {
+    const { useSubmitAlertFeedback } = await import("@workspace/api-client-react");
+    const mockMutateAsync = vi.fn().mockResolvedValue({});
+    (useSubmitAlertFeedback as ReturnType<typeof vi.fn>).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    });
+
+    render(<AlertDetailPanel {...defaultProps} alert={makeAlert()} />);
+    await userEvent.click(screen.getByTestId("feedback-btn-useful"));
+    expect(mockMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 42, data: expect.objectContaining({ rating: "useful" }) })
+    );
+  });
+
+  it("calls submitFeedback.mutateAsync with 'noise' when Noise is clicked", async () => {
+    const { useSubmitAlertFeedback } = await import("@workspace/api-client-react");
+    const mockMutateAsync = vi.fn().mockResolvedValue({});
+    (useSubmitAlertFeedback as ReturnType<typeof vi.fn>).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    });
+
+    render(<AlertDetailPanel {...defaultProps} alert={makeAlert()} />);
+    await userEvent.click(screen.getByTestId("feedback-btn-noise"));
+    expect(mockMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 42, data: expect.objectContaining({ rating: "noise" }) })
+    );
+  });
+
+  it("calls submitFeedback.mutateAsync with 'investigate_later' when Later is clicked", async () => {
+    const { useSubmitAlertFeedback } = await import("@workspace/api-client-react");
+    const mockMutateAsync = vi.fn().mockResolvedValue({});
+    (useSubmitAlertFeedback as ReturnType<typeof vi.fn>).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    });
+
+    render(<AlertDetailPanel {...defaultProps} alert={makeAlert()} />);
+    await userEvent.click(screen.getByTestId("feedback-btn-investigate-later"));
+    expect(mockMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 42, data: expect.objectContaining({ rating: "investigate_later" }) })
+    );
+  });
+});
+
+// ─── persisted state from alert.workflowAction ───────────────────────────────
+
+describe("AlertDetailPanel — persisted workflow state", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows workflowAction badge from alert.workflowAction field", () => {
+    render(
+      <AlertDetailPanel
+        {...defaultProps}
+        alert={makeAlert({ workflowAction: "investigate" } as Parameters<typeof makeAlert>[0])}
+        action={null}
+        onActionChange={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId("action-state-badge")).toBeInTheDocument();
+    expect(screen.getByTestId("action-state-badge").textContent?.toLowerCase()).toContain("investigate");
+  });
+
+  it("prefers alert.workflowAction over action prop when both set", () => {
+    render(
+      <AlertDetailPanel
+        {...defaultProps}
+        alert={makeAlert({ workflowAction: "monitor" } as Parameters<typeof makeAlert>[0])}
+        action="investigate"
+        onActionChange={vi.fn()}
+      />
+    );
+    // workflowAction from alert takes precedence
+    expect(screen.getByTestId("action-state-badge").textContent?.toLowerCase()).toContain("monitor");
+  });
+
+  it("calls upsertWorkflow.mutateAsync when action button clicked", async () => {
+    const { useUpsertAlertWorkflowState } = await import("@workspace/api-client-react");
+    const mockMutateAsync = vi.fn().mockResolvedValue({
+      id: 1, alertEventId: 42, organizationId: "org-a",
+      userId: null, action: "investigate",
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    });
+    (useUpsertAlertWorkflowState as ReturnType<typeof vi.fn>).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    });
+
+    const onActionChange = vi.fn();
+    render(
+      <AlertDetailPanel
+        {...defaultProps}
+        alert={makeAlert()}
+        action={null}
+        onActionChange={onActionChange}
+      />
+    );
+    await userEvent.click(screen.getByTestId("action-btn-investigate"));
+    expect(mockMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 42,
+        data: expect.objectContaining({ action: "investigate" }),
+      })
+    );
+  });
+
+  it("calls clearWorkflow.mutateAsync when active action button clicked to toggle off", async () => {
+    const { useClearAlertWorkflowState } = await import("@workspace/api-client-react");
+    const mockMutateAsync = vi.fn().mockResolvedValue(undefined);
+    (useClearAlertWorkflowState as ReturnType<typeof vi.fn>).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    });
+
+    const onActionChange = vi.fn();
+    render(
+      <AlertDetailPanel
+        {...defaultProps}
+        alert={makeAlert()}
+        action="investigate"
+        onActionChange={onActionChange}
+      />
+    );
+    await userEvent.click(screen.getByTestId("action-btn-investigate"));
+    expect(mockMutateAsync).toHaveBeenCalledWith({ id: 42 });
   });
 });

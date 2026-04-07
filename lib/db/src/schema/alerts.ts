@@ -110,3 +110,36 @@ export const alertFeedbackTable = pgTable(
 
 export type AlertFeedback = typeof alertFeedbackTable.$inferSelect;
 export type NewAlertFeedback = typeof alertFeedbackTable.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// alert_workflow_state
+// ---------------------------------------------------------------------------
+
+export type AlertWorkflowAction = "investigate" | "monitor" | "ignore";
+
+export const alertWorkflowStateTable = pgTable(
+  "alert_workflow_state",
+  {
+    id: serial("id").primaryKey(),
+    alertEventId: integer("alert_event_id")
+      .notNull()
+      .references(() => alertEventsTable.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    /** Optional user who set the action (for multi-user future support). */
+    userId: uuid("user_id")
+      .references(() => usersTable.id, { onDelete: "set null" }),
+    action: text("action").$type<AlertWorkflowAction>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_alert_workflow_state").on(t.alertEventId, t.organizationId),
+    index("alert_workflow_state_org_idx").on(t.organizationId),
+    index("alert_workflow_state_action_idx").on(t.action),
+  ]
+);
+
+export type AlertWorkflowState = typeof alertWorkflowStateTable.$inferSelect;
+export type NewAlertWorkflowState = typeof alertWorkflowStateTable.$inferInsert;

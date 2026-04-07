@@ -24,6 +24,8 @@ import type {
   AlertFeedbackRequest,
   AlertRule,
   AlertRuleList,
+  AlertWorkflowState,
+  UpsertAlertWorkflowStateRequest,
   Article,
   ArticleList,
   BulkMarkReadRequest,
@@ -3008,3 +3010,151 @@ export function useGetPortfolioExposureAlerts<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+// ---------------------------------------------------------------------------
+// Alert workflow state
+// ---------------------------------------------------------------------------
+
+export const getUpsertAlertWorkflowStateUrl = (id: number) => {
+  return `/api/alerts/${id}/workflow`;
+};
+
+export const upsertAlertWorkflowState = async (
+  id: number,
+  upsertAlertWorkflowStateRequest: BodyType<UpsertAlertWorkflowStateRequest>,
+  options?: SecondParameter<typeof customFetch>,
+): Promise<AlertWorkflowState> => {
+  return customFetch<AlertWorkflowState>(getUpsertAlertWorkflowStateUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(upsertAlertWorkflowStateRequest),
+  });
+};
+
+export const getUpsertAlertWorkflowStateMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof upsertAlertWorkflowState>>,
+    TError,
+    { id: number; data: BodyType<UpsertAlertWorkflowStateRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof upsertAlertWorkflowState>>,
+  TError,
+  { id: number; data: BodyType<UpsertAlertWorkflowStateRequest> },
+  TContext
+> => {
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+  const mutationKey = ["upsertAlertWorkflowState"];
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof upsertAlertWorkflowState>>,
+    { id: number; data: BodyType<UpsertAlertWorkflowStateRequest> }
+  > = ({ id, data }) => {
+    return upsertAlertWorkflowState(id, data, requestOptions);
+  };
+  return { mutationKey, mutationFn, ...mutationOptions };
+};
+
+export type UpsertAlertWorkflowStateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof upsertAlertWorkflowState>>
+>;
+export type UpsertAlertWorkflowStateMutationBody = BodyType<UpsertAlertWorkflowStateRequest>;
+export type UpsertAlertWorkflowStateMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Upsert analyst workflow action for an alert event
+ */
+export const useUpsertAlertWorkflowState = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof upsertAlertWorkflowState>>,
+    TError,
+    { id: number; data: BodyType<UpsertAlertWorkflowStateRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof upsertAlertWorkflowState>>,
+  TError,
+  { id: number; data: BodyType<UpsertAlertWorkflowStateRequest> },
+  TContext
+> => {
+  return useMutation(getUpsertAlertWorkflowStateMutationOptions(options));
+};
+
+export const getClearAlertWorkflowStateUrl = (id: number) => {
+  return `/api/alerts/${id}/workflow`;
+};
+
+export const clearAlertWorkflowState = async (
+  id: number,
+  options?: SecondParameter<typeof customFetch>,
+): Promise<void> => {
+  return customFetch<void>(getClearAlertWorkflowStateUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getClearAlertWorkflowStateMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof clearAlertWorkflowState>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof clearAlertWorkflowState>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+  const mutationKey = ["clearAlertWorkflowState"];
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof clearAlertWorkflowState>>,
+    { id: number }
+  > = ({ id }) => {
+    return clearAlertWorkflowState(id, requestOptions);
+  };
+  return { mutationKey, mutationFn, ...mutationOptions };
+};
+
+export type ClearAlertWorkflowStateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof clearAlertWorkflowState>>
+>;
+export type ClearAlertWorkflowStateMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Clear analyst workflow action for an alert event
+ */
+export const useClearAlertWorkflowState = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof clearAlertWorkflowState>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof clearAlertWorkflowState>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getClearAlertWorkflowStateMutationOptions(options));
+};

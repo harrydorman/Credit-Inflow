@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.3.0
  */
 import type { ListAlertEventsSeverity } from "./listAlertEventsSeverity";
+import type { AlertWorkflowAction } from "./alertWorkflowAction";
 
 export type ListAlertEventsParams = {
   organizationId?: string;
@@ -17,6 +18,10 @@ export type ListAlertEventsParams = {
   portfolioLinked?: boolean;
   dateFrom?: Date;
   dateTo?: Date;
+  /** Filter by analyst workflow action. Use "unassigned" for alerts with no action set. */
+  action?: AlertWorkflowAction | "unassigned";
+  /** Optional user ID for per-user workflow state context. */
+  userId?: string;
   limit?: number;
   offset?: number;
 };
