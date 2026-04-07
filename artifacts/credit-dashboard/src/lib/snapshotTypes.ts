@@ -18,6 +18,11 @@ export interface RankingSnapshotMetrics {
   investigateRateAmongPortfolioLinkedBoosted: number;
   topBoostedEventTypes: { eventType: string; totalBoost: number }[];
   topPenalisedRules: { ruleName: string; totalPenalty: number }[];
+  /**
+   * Indicates whether metrics were computed server-side from persisted data
+   * or estimated client-side from current in-memory scores.
+   */
+  metricSource?: "estimated" | "server-computed";
 }
 
 /** A persisted ranking evaluation snapshot (as returned by the API). */

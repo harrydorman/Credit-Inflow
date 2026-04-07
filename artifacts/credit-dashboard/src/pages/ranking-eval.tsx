@@ -4,6 +4,7 @@
  * Phase 10: Internal ranking evaluation page.
  * Phase 11: Ranking Calibration + Time-Windowed Evaluation.
  * Phase 12: Ranking Calibration Recommendations + Historical Evaluation Snapshots.
+ * Phase 13: Feedback-Aware Snapshot Metrics + Outcome Attribution.
  *
  * Compares baseline vs analytics-informed scores for alerts in the selected
  * time window, showing aggregate calibration metrics, recommendations, snapshot
@@ -40,6 +41,7 @@ import {
 } from "@/lib/rankingEvaluation";
 import { getAllRecommendations } from "@/lib/rankingRecommendations";
 import { compareSnapshots } from "@/lib/snapshotComparison";
+import { computeOutcomeAttribution, type OutcomeAttributionSummary } from "@/lib/outcomeAttribution";
 import {
   TrendingUp,
   TrendingDown,
@@ -51,6 +53,11 @@ import {
   History,
   Lightbulb,
   ArrowRightLeft,
+  Target,
+  ChevronDown,
+  ChevronUp,
+  Server,
+  Layers,
 } from "lucide-react";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -100,6 +107,7 @@ function metricsFromAggregate(
       trend?.investigateRateAmongPortfolioLinkedBoosted ?? 0,
     topBoostedEventTypes: m.topBoostedEventTypes,
     topPenalisedRules: m.topPenalisedRules,
+    metricSource: "estimated" as const,
   };
 }
 
@@ -280,6 +288,130 @@ function RecommendationsPanel({ metrics }: { metrics: RankingAggregateMetrics })
   );
 }
 
+// ─── outcome attribution panel ────────────────────────────────────────────────
+
+function OutcomeAttributionPanel({
+  attribution,
+}: {
+  attribution: OutcomeAttributionSummary;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div
+      className="rounded-md border border-border bg-secondary/10 px-4 py-3 space-y-3"
+      data-testid="outcome-attribution-panel"
+    >
+      <div className="flex items-center gap-1.5">
+        <Target className="h-3.5 w-3.5 text-primary" />
+        <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
+          Outcome attribution
+        </p>
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="ml-auto text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+          data-testid="attribution-expand-button"
+        >
+          {expanded ? (
+            <ChevronUp className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </div>
+
+      {/* Summary row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <MetricCard
+          label="Boosted alerts"
+          value={attribution.boostedCount}
+          sub={`of ${attribution.totalAlerts} total`}
+        />
+        <MetricCard
+          label="Boosted → investigated"
+          value={pct(attribution.boostedInvestigateRate)}
+          sub={`${attribution.boostedInvestigatedCount} alerts`}
+        />
+        <MetricCard
+          label="Penalised alerts"
+          value={attribution.penalisedCount}
+          sub={`of ${attribution.totalAlerts} total`}
+        />
+        <MetricCard
+          label="Penalised → noise"
+          value={pct(attribution.penalisedNoiseRate)}
+          sub={`${attribution.penalisedNoiseCount} alerts`}
+        />
+      </div>
+
+      {/* Expanded breakdown */}
+      {expanded && (
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1"
+          data-testid="attribution-detail"
+        >
+          {attribution.topBoostedInvestigatedEventTypes.length > 0 && (
+            <div>
+              <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide mb-2">
+                Top boosted event types → investigated
+              </p>
+              <div className="space-y-1">
+                {attribution.topBoostedInvestigatedEventTypes.map((row) => (
+                  <div
+                    key={row.label}
+                    className="flex items-center justify-between text-xs font-mono"
+                  >
+                    <span className="text-foreground capitalize">
+                      {row.label.replace(/_/g, " ")}
+                    </span>
+                    <span className="text-green-400">
+                      {pct(row.favourableRate)}{" "}
+                      <span className="text-muted-foreground">
+                        ({row.favourableCount}/{row.count})
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {attribution.topPenalisedNoisyRules.length > 0 && (
+            <div>
+              <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide mb-2">
+                Top penalised rules → noise
+              </p>
+              <div className="space-y-1">
+                {attribution.topPenalisedNoisyRules.map((row) => (
+                  <div
+                    key={row.label}
+                    className="flex items-center justify-between text-xs font-mono"
+                  >
+                    <span className="text-foreground">{row.label}</span>
+                    <span className="text-destructive">
+                      {pct(row.favourableRate)}{" "}
+                      <span className="text-muted-foreground">
+                        ({row.favourableCount}/{row.count})
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {attribution.topBoostedInvestigatedEventTypes.length === 0 &&
+            attribution.topPenalisedNoisyRules.length === 0 && (
+              <p className="text-[11px] font-mono text-muted-foreground col-span-2">
+                No outcome data available — alerts need workflow or feedback actions first.
+              </p>
+            )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── snapshot comparison panel ────────────────────────────────────────────────
 
 function SnapshotComparisonPanel({
@@ -360,6 +492,18 @@ function SnapshotComparisonPanel({
           );
         })}
       </div>
+
+      {/* Comparison reasoning */}
+      <div
+        className="space-y-0.5 border-t border-border/30 pt-2"
+        data-testid="comparison-explanations"
+      >
+        {comparison.explanations.map((explanation, i) => (
+          <p key={i} className="text-[11px] font-mono text-muted-foreground">
+            {explanation}
+          </p>
+        ))}
+      </div>
     </div>
   );
 }
@@ -405,6 +549,9 @@ function SnapshotsPanel({ timeWindow }: { timeWindow: TimeWindow }) {
             >
               <span className="text-muted-foreground">
                 #{s.id} · {s.rankingModelVersion} · {s.snapshotType}
+                {s.metricsJson.metricSource === "server-computed" && (
+                  <span className="ml-1 text-primary/70">[server]</span>
+                )}
               </span>
               <span className="text-foreground">
                 {pct(s.metricsJson.adjustedFraction)} adj ·{" "}
@@ -421,9 +568,13 @@ function SnapshotsPanel({ timeWindow }: { timeWindow: TimeWindow }) {
 
 // ─── page ─────────────────────────────────────────────────────────────────────
 
+/** Save mode: frontend-estimated metrics vs server-computed metrics. */
+type SaveMode = "estimated" | "server-computed";
+
 export default function RankingEvalPage() {
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("all");
   const [snapshotSaved, setSnapshotSaved] = useState(false);
+  const [saveMode, setSaveMode] = useState<SaveMode>("estimated");
 
   const { data: alertsData, isLoading: alertsLoading } = useListAlertEvents({ limit: 500 });
   const { data: analyticsData, isLoading: analyticsLoading } =
@@ -467,6 +618,16 @@ export default function RankingEvalPage() {
     [comparisons, windowedAlerts],
   );
 
+  // Outcome attribution (pure, from comparisons + alert data)
+  const attribution = useMemo(
+    () =>
+      computeOutcomeAttribution(
+        comparisons,
+        windowedAlerts as (AlertEvent & { ruleName?: string | null })[],
+      ),
+    [comparisons, windowedAlerts],
+  );
+
   const movedUp = comparisons.filter((c) => c.scoreDelta > 0);
   const movedDown = comparisons.filter((c) => c.scoreDelta < 0);
   const unchanged = comparisons.filter((c) => c.scoreDelta === 0);
@@ -481,15 +642,26 @@ export default function RankingEvalPage() {
 
   const handleSaveSnapshot = useCallback(async () => {
     if (metrics.totalAlerts === 0) return;
-    await createSnapshot.mutateAsync({
-      rankingModelVersion: RANKING_MODEL_VERSION,
-      timeWindow,
-      metrics: metricsFromAggregate(metrics),
-    });
+
+    if (saveMode === "server-computed") {
+      // Send without metrics — server will compute them from DB
+      await createSnapshot.mutateAsync({
+        rankingModelVersion: RANKING_MODEL_VERSION,
+        timeWindow,
+        metrics: undefined,
+      });
+    } else {
+      await createSnapshot.mutateAsync({
+        rankingModelVersion: RANKING_MODEL_VERSION,
+        timeWindow,
+        metrics: metricsFromAggregate(metrics),
+      });
+    }
+
     setSnapshotSaved(true);
     refetchSnapshots();
     setTimeout(() => setSnapshotSaved(false), 3000);
-  }, [metrics, timeWindow, createSnapshot, refetchSnapshots]);
+  }, [metrics, timeWindow, createSnapshot, refetchSnapshots, saveMode]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -555,21 +727,63 @@ export default function RankingEvalPage() {
 
         {!isLoading && windowedAlerts.length > 0 && (
           <>
-            {/* Aggregate metrics + save snapshot button */}
+            {/* Aggregate metrics + save snapshot controls */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
-                  Aggregate metrics · {TIME_WINDOW_LABELS[timeWindow]}
-                </p>
-                <button
-                  onClick={handleSaveSnapshot}
-                  disabled={createSnapshot.isPending}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono border border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors disabled:opacity-50"
-                  data-testid="save-snapshot-button"
-                >
-                  <Camera className="h-3 w-3" />
-                  {snapshotSaved ? "Saved!" : createSnapshot.isPending ? "Saving…" : "Save snapshot"}
-                </button>
+              <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
+                    Aggregate metrics · {TIME_WINDOW_LABELS[timeWindow]}
+                  </p>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] font-mono text-muted-foreground border-border"
+                    data-testid="metric-source-badge"
+                  >
+                    <Layers className="h-3 w-3 mr-1" />
+                    {saveMode === "server-computed" ? "server-computed" : "estimated"}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-1">
+                  {/* Save mode toggle */}
+                  <div
+                    className="flex items-center gap-0.5 rounded border border-border overflow-hidden"
+                    data-testid="save-mode-toggle"
+                  >
+                    <button
+                      onClick={() => setSaveMode("estimated")}
+                      className={`px-2 py-1 text-[10px] font-mono transition-colors ${
+                        saveMode === "estimated"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+                      }`}
+                      data-testid="save-mode-estimated"
+                    >
+                      <Layers className="h-3 w-3 inline mr-0.5" />
+                      Current view
+                    </button>
+                    <button
+                      onClick={() => setSaveMode("server-computed")}
+                      className={`px-2 py-1 text-[10px] font-mono transition-colors ${
+                        saveMode === "server-computed"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+                      }`}
+                      data-testid="save-mode-server"
+                    >
+                      <Server className="h-3 w-3 inline mr-0.5" />
+                      Server-compute
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleSaveSnapshot}
+                    disabled={createSnapshot.isPending}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono border border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors disabled:opacity-50"
+                    data-testid="save-snapshot-button"
+                  >
+                    <Camera className="h-3 w-3" />
+                    {snapshotSaved ? "Saved!" : createSnapshot.isPending ? "Saving…" : "Save snapshot"}
+                  </button>
+                </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <MetricCard
@@ -604,6 +818,9 @@ export default function RankingEvalPage() {
 
             {/* Recommendations */}
             <RecommendationsPanel metrics={metrics} />
+
+            {/* Outcome attribution */}
+            <OutcomeAttributionPanel attribution={attribution} />
 
             {/* Snapshot comparison */}
             {mostRecentSnapshot && (
