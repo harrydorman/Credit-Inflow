@@ -10,6 +10,7 @@ import {
   ANALYST_ACTION_LABELS,
   ANALYST_ACTION_STYLES,
   type AnalystAction,
+  type RankingContext,
 } from "@/lib/alertPriority";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -63,8 +64,14 @@ export function SeverityBadge({
 
 // ─── PriorityBadge ───────────────────────────────────────────────────────────
 
-export function PriorityBadge({ alert }: { alert: AlertEvent }) {
-  const { label } = getAlertPriority(alert);
+export function PriorityBadge({
+  alert,
+  rankingContext,
+}: {
+  alert: AlertEvent;
+  rankingContext?: RankingContext;
+}) {
+  const { label } = getAlertPriority(alert, rankingContext);
   return (
     <Badge
       className={cn(
@@ -105,6 +112,7 @@ interface AlertFeedRowProps {
   onClick: (alert: AlertEvent) => void;
   markReadPending: boolean;
   action?: AnalystAction;
+  rankingContext?: RankingContext;
 }
 
 export function AlertFeedRow({
@@ -115,6 +123,7 @@ export function AlertFeedRow({
   onClick,
   markReadPending,
   action,
+  rankingContext,
 }: AlertFeedRowProps) {
   const isPortfolioLinked = Boolean(
     (alert as AlertEvent & { portfolioLinked?: boolean }).portfolioLinked,
@@ -128,7 +137,7 @@ export function AlertFeedRow({
       minute: "2-digit",
     });
 
-  const { label: priorityLabel } = getAlertPriority(alert);
+  const { label: priorityLabel } = getAlertPriority(alert, rankingContext);
   const isCritical = priorityLabel === "Critical";
 
   function rowClassName() {
@@ -206,7 +215,7 @@ export function AlertFeedRow({
             </span>
           )}
 
-          <PriorityBadge alert={alert} />
+          <PriorityBadge alert={alert} rankingContext={rankingContext} />
           <ActionBadge action={action ?? null} />
         </div>
       </div>
