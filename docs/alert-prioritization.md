@@ -168,7 +168,7 @@ Tests are located at:
 Run with:
 
 ```bash
-cd artifacts/credit-dashboard && npx pnpm test
+cd artifacts/credit-dashboard && pnpm test
 ```
 
 ---

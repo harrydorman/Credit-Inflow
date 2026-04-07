@@ -131,17 +131,19 @@ export function AlertFeedRow({
   const { label: priorityLabel } = getAlertPriority(alert);
   const isCritical = priorityLabel === "Critical";
 
+  function rowClassName() {
+    if (alert.isRead) return "bg-card hover:bg-secondary/20 text-muted-foreground";
+    if (isCritical) return "bg-red-950/20 hover:bg-red-950/30 border-l-2 border-l-red-600";
+    return "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary";
+  }
+
   return (
     <div
       role="row"
       data-testid={`alert-row-${alert.id}`}
       className={cn(
         "group flex items-start gap-3 px-4 py-3 border-b border-border cursor-pointer transition-colors",
-        alert.isRead
-          ? "bg-card hover:bg-secondary/20 text-muted-foreground"
-          : isCritical
-            ? "bg-red-950/20 hover:bg-red-950/30 border-l-2 border-l-red-600"
-            : "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary",
+        rowClassName(),
       )}
       onClick={() => onClick(alert)}
     >

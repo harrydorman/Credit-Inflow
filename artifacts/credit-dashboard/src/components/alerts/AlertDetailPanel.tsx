@@ -130,6 +130,12 @@ export function AlertDetailPanel({
   const triggerReason = buildTriggerReason(alert);
   const priority = getAlertPriority(alert);
 
+  /** Toggle an analyst action: clicking the active action clears it. */
+  function handleActionToggle(targetAction: NonNullable<AnalystAction>) {
+    if (!onActionChange) return;
+    onActionChange(alert!.id, action === targetAction ? null : targetAction);
+  }
+
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
       <SheetContent
@@ -302,12 +308,7 @@ export function AlertDetailPanel({
                   size="sm"
                   variant={action === "investigate" ? "default" : "outline"}
                   className="h-7 text-xs font-mono"
-                  onClick={() =>
-                    onActionChange(
-                      alert.id,
-                      action === "investigate" ? null : "investigate",
-                    )
-                  }
+                  onClick={() => handleActionToggle("investigate")}
                   data-testid="action-btn-investigate"
                 >
                   <TrendingUp className="h-3 w-3 mr-1" />
@@ -317,12 +318,7 @@ export function AlertDetailPanel({
                   size="sm"
                   variant={action === "monitor" ? "default" : "outline"}
                   className="h-7 text-xs font-mono"
-                  onClick={() =>
-                    onActionChange(
-                      alert.id,
-                      action === "monitor" ? null : "monitor",
-                    )
-                  }
+                  onClick={() => handleActionToggle("monitor")}
                   data-testid="action-btn-monitor"
                 >
                   <Eye className="h-3 w-3 mr-1" />
@@ -332,12 +328,7 @@ export function AlertDetailPanel({
                   size="sm"
                   variant={action === "ignore" ? "secondary" : "outline"}
                   className="h-7 text-xs font-mono"
-                  onClick={() =>
-                    onActionChange(
-                      alert.id,
-                      action === "ignore" ? null : "ignore",
-                    )
-                  }
+                  onClick={() => handleActionToggle("ignore")}
                   data-testid="action-btn-ignore"
                 >
                   <EyeOff className="h-3 w-3 mr-1" />

@@ -53,7 +53,9 @@ function AlertFeed() {
   const markUnread = useMarkAlertUnread();
   const bulkMarkRead = useBulkMarkAlertsRead();
 
-  // Build params from filters (server-side filters only)
+  // Build params from filters (server-side filters only).
+  // Note: when unreadHighPriority is active we skip the server-side isRead
+  // filter and apply both read-state and priority filtering client-side instead.
   const params: ListAlertEventsParams = {
     limit: 100,
     ...(filters.isRead === "unread" && !filters.unreadHighPriority ? { isRead: false } : {}),

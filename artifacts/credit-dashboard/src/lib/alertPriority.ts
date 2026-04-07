@@ -42,9 +42,9 @@ function deriveSeverity(alert: AlertEvent): "high" | "medium" | "low" | null {
  *
  * Components:
  *   - Severity  : high=40, medium=25, low=10
- *   - Confidence: confidence * 30  (0–30)
+ *   - Confidence: confidence * 30  (0–30); confidence is a 0–1 fraction
  *   - Portfolio : portfolioLinked  → +20
- *   - Urgency   : (urgency/10) * 10 (0–10)
+ *   - Urgency   : (urgency/10) * 10 (0–10); urgency is expected in range 0–10
  */
 export function computePriorityScore(alert: AlertEvent): number {
   const severity = deriveSeverity(alert);
