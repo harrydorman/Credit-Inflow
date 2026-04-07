@@ -4,5 +4,6 @@ export * from "./issuer-snapshots";
 export * from "./jobs";
 export * from "./notifications";
 export * from "./portfolios";
+export * from "./rankingEvalSnapshots";
 export * from "./tenants";
 export * from "./watchlists";

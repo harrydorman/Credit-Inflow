@@ -14,6 +14,8 @@ import {
   buildRankingContext,
   MAX_TOTAL_ADJUSTMENT,
   RANKING_MODE,
+  RANKING_MODEL_VERSION,
+  RANKING_CALIBRATION_CONFIG,
   type RankingContext,
 } from "./alertPriority";
 import type { AlertEvent } from "@workspace/api-client-react";
@@ -629,5 +631,101 @@ describe("getAlertPriority breakdown field", () => {
     const alert = makeAlert({ severity: "high", confidence: 1.0, portfolioLinked: true, urgency: 10 });
     const result = getAlertPriority(alert);
     expect(result.label).toBe(result.breakdown!.finalLabel);
+  });
+});
+
+// ─── RANKING_MODEL_VERSION ────────────────────────────────────────────────────
+
+describe("RANKING_MODEL_VERSION", () => {
+  it("is a non-empty string", () => {
+    expect(typeof RANKING_MODEL_VERSION).toBe("string");
+    expect(RANKING_MODEL_VERSION.length).toBeGreaterThan(0);
+  });
+
+  it("follows semver-like v<major>.<minor>.<patch> format", () => {
+    expect(RANKING_MODEL_VERSION).toMatch(/^v\d+\.\d+\.\d+$/);
+  });
+
+  it("is present in computeRankingBreakdown output", () => {
+    const alert = makeAlert();
+    const breakdown = computeRankingBreakdown(alert);
+    expect(breakdown.modelVersion).toBe(RANKING_MODEL_VERSION);
+  });
+
+  it("is present in getAlertPriority breakdown", () => {
+    const alert = makeAlert();
+    const priority = getAlertPriority(alert);
+    expect(priority.breakdown?.modelVersion).toBe(RANKING_MODEL_VERSION);
+  });
+
+  it("is present in breakdown when analytics context is applied", () => {
+    if (RANKING_MODE !== "analytics-informed") return;
+    const alert = makeAlert({ severity: "low", confidence: 0.2 });
+    const ctx: RankingContext = { eventTypeUsefulnessScore: 1.0 };
+    const breakdown = computeRankingBreakdown(alert, ctx);
+    expect(breakdown.modelVersion).toBe(RANKING_MODEL_VERSION);
+  });
+});
+
+// ─── RANKING_CALIBRATION_CONFIG ───────────────────────────────────────────────
+
+describe("RANKING_CALIBRATION_CONFIG", () => {
+  it("has eventTypeBoost with threshold and max", () => {
+    expect(typeof RANKING_CALIBRATION_CONFIG.eventTypeBoost.threshold).toBe("number");
+    expect(typeof RANKING_CALIBRATION_CONFIG.eventTypeBoost.max).toBe("number");
+  });
+
+  it("has issuerBoost with threshold and max", () => {
+    expect(typeof RANKING_CALIBRATION_CONFIG.issuerBoost.threshold).toBe("number");
+    expect(typeof RANKING_CALIBRATION_CONFIG.issuerBoost.max).toBe("number");
+  });
+
+  it("has ruleNoisePenalty with threshold and max", () => {
+    expect(typeof RANKING_CALIBRATION_CONFIG.ruleNoisePenalty.threshold).toBe("number");
+    expect(typeof RANKING_CALIBRATION_CONFIG.ruleNoisePenalty.max).toBe("number");
+  });
+
+  it("has totalAdjustmentCap equal to MAX_TOTAL_ADJUSTMENT", () => {
+    expect(RANKING_CALIBRATION_CONFIG.totalAdjustmentCap).toBe(MAX_TOTAL_ADJUSTMENT);
+  });
+
+  it("config-driven scores match expected output (event type boost)", () => {
+    if (RANKING_MODE !== "analytics-informed") return;
+    const alert = makeAlert({ severity: "low", confidence: 0.0, urgency: 0, portfolioLinked: false });
+    const ctx: RankingContext = { eventTypeUsefulnessScore: 1.0 };
+    const adj = computeAnalyticsAdjustment(ctx);
+    // Max boost should equal config max
+    expect(adj.eventTypeBoost).toBe(RANKING_CALIBRATION_CONFIG.eventTypeBoost.max);
+  });
+
+  it("config-driven scores match expected output (rule noise penalty)", () => {
+    if (RANKING_MODE !== "analytics-informed") return;
+    const ctx: RankingContext = { ruleNoiseScore: 1.0 };
+    const adj = computeAnalyticsAdjustment(ctx);
+    // Max penalty should equal config max
+    expect(adj.ruleNoisePenalty).toBe(RANKING_CALIBRATION_CONFIG.ruleNoisePenalty.max);
+  });
+
+  it("config-driven scores match expected output (issuer boost)", () => {
+    if (RANKING_MODE !== "analytics-informed") return;
+    const ctx: RankingContext = { issuerInvestigateScore: 1.0 };
+    const adj = computeAnalyticsAdjustment(ctx);
+    expect(adj.issuerBoost).toBe(RANKING_CALIBRATION_CONFIG.issuerBoost.max);
+  });
+
+  it("no boost when score is below threshold", () => {
+    const ctx: RankingContext = {
+      eventTypeUsefulnessScore: RANKING_CALIBRATION_CONFIG.eventTypeBoost.threshold - 0.01,
+    };
+    const adj = computeAnalyticsAdjustment(ctx);
+    expect(adj.eventTypeBoost).toBe(0);
+  });
+
+  it("no penalty when noise score is below threshold", () => {
+    const ctx: RankingContext = {
+      ruleNoiseScore: RANKING_CALIBRATION_CONFIG.ruleNoisePenalty.threshold - 0.01,
+    };
+    const adj = computeAnalyticsAdjustment(ctx);
+    expect(adj.ruleNoisePenalty).toBe(0);
   });
 });

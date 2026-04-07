@@ -63,6 +63,9 @@ import type {
   WatchlistItem,
   WatchlistItemList,
   WatchlistList,
+  RankingEvalSnapshot,
+  RankingEvalSnapshotList,
+  CreateRankingEvalSnapshotRequest,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -3223,6 +3226,164 @@ export function useGetAlertAnalytics<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getAlertAnalyticsQueryOptions(options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+// ---------------------------------------------------------------------------
+// Ranking Evaluation Snapshots (Phase 12)
+// ---------------------------------------------------------------------------
+
+/**
+ * @summary Create a ranking evaluation snapshot for the authenticated org
+ */
+export const createRankingEvalSnapshotUrl = () =>
+  `/api/analytics/ranking-eval/snapshots`;
+
+export const createRankingEvalSnapshot = async (
+  body: CreateRankingEvalSnapshotRequest,
+  options?: RequestInit,
+): Promise<RankingEvalSnapshot> => {
+  return customFetch<RankingEvalSnapshot>(createRankingEvalSnapshotUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(body),
+  });
+};
+
+export const getCreateRankingEvalSnapshotMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRankingEvalSnapshot>>,
+    TError,
+    CreateRankingEvalSnapshotRequest,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createRankingEvalSnapshot>>,
+  TError,
+  CreateRankingEvalSnapshotRequest,
+  TContext
+> => {
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createRankingEvalSnapshot>>,
+    CreateRankingEvalSnapshotRequest
+  > = (body) => createRankingEvalSnapshot(body, requestOptions);
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateRankingEvalSnapshotMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createRankingEvalSnapshot>>
+>;
+export type CreateRankingEvalSnapshotMutationBody = CreateRankingEvalSnapshotRequest;
+export type CreateRankingEvalSnapshotMutationError = ErrorType<unknown>;
+
+export function useCreateRankingEvalSnapshot<
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRankingEvalSnapshot>>,
+    TError,
+    CreateRankingEvalSnapshotRequest,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createRankingEvalSnapshot>>,
+  TError,
+  CreateRankingEvalSnapshotRequest,
+  TContext
+> {
+  const mutationOptions = getCreateRankingEvalSnapshotMutationOptions(options);
+  return useMutation(mutationOptions);
+}
+
+/**
+ * @summary List ranking evaluation snapshots for the authenticated org
+ */
+export const listRankingEvalSnapshotsUrl = () =>
+  `/api/analytics/ranking-eval/snapshots`;
+
+export interface ListRankingEvalSnapshotsParams {
+  timeWindow?: "7d" | "30d" | "all";
+  modelVersion?: string;
+  limit?: number;
+}
+
+export const listRankingEvalSnapshots = async (
+  params?: ListRankingEvalSnapshotsParams,
+  options?: RequestInit,
+): Promise<RankingEvalSnapshotList> => {
+  const url = new URL(listRankingEvalSnapshotsUrl(), "http://localhost");
+  if (params?.timeWindow) url.searchParams.set("timeWindow", params.timeWindow);
+  if (params?.modelVersion) url.searchParams.set("modelVersion", params.modelVersion);
+  if (params?.limit != null) url.searchParams.set("limit", String(params.limit));
+  return customFetch<RankingEvalSnapshotList>(
+    `${url.pathname}${url.search}`,
+    { ...options, method: "GET" },
+  );
+};
+
+export const getListRankingEvalSnapshotsQueryKey = (
+  params?: ListRankingEvalSnapshotsParams,
+) => [`/api/analytics/ranking-eval/snapshots`, ...(params ? [params] : [])] as const;
+
+export const getListRankingEvalSnapshotsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listRankingEvalSnapshots>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListRankingEvalSnapshotsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listRankingEvalSnapshots>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey =
+    queryOptions?.queryKey ?? getListRankingEvalSnapshotsQueryKey(params);
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listRankingEvalSnapshots>>
+  > = ({ signal }) =>
+    listRankingEvalSnapshots(params, { signal, ...requestOptions });
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listRankingEvalSnapshots>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListRankingEvalSnapshotsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listRankingEvalSnapshots>>
+>;
+export type ListRankingEvalSnapshotsQueryError = ErrorType<unknown>;
+
+export function useListRankingEvalSnapshots<
+  TData = Awaited<ReturnType<typeof listRankingEvalSnapshots>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListRankingEvalSnapshotsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listRankingEvalSnapshots>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListRankingEvalSnapshotsQueryOptions(params, options);
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
   };
