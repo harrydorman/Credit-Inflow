@@ -450,3 +450,80 @@ describe("PriorityBadge", () => {
   });
 });
 
+
+// ─── AlertFeedFilters — action filter ────────────────────────────────────────
+
+describe("AlertFeedFilters — action filter", () => {
+  const makeFilters = (overrides = {}) => ({
+    severity: "" as const,
+    isRead: "" as const,
+    issuerName: "",
+    eventType: "",
+    portfolioLinked: null,
+    dateFrom: "",
+    dateTo: "",
+    priority: "" as const,
+    unreadHighPriority: false,
+    action: "" as const,
+    ...overrides,
+  });
+
+  it("renders action filter select", () => {
+    const onChange = vi.fn();
+    render(
+      <AlertFeedFilters
+        filters={makeFilters()}
+        onChange={onChange}
+      />
+    );
+    expect(screen.getByTestId("filter-action")).toBeInTheDocument();
+  });
+
+  it("shows 'All actions' by default", () => {
+    const onChange = vi.fn();
+    render(
+      <AlertFeedFilters
+        filters={makeFilters()}
+        onChange={onChange}
+      />
+    );
+    expect(screen.getByTestId("filter-action")).toHaveTextContent("All actions");
+  });
+
+  it("hasActiveFilters when action is set", () => {
+    const onChange = vi.fn();
+    render(
+      <AlertFeedFilters
+        filters={makeFilters({ action: "investigate" })}
+        onChange={onChange}
+      />
+    );
+    // Clear button should appear when there are active filters
+    expect(screen.getByTestId("filter-clear")).toBeInTheDocument();
+  });
+
+  it("does not show clear button when action is empty", () => {
+    const onChange = vi.fn();
+    render(
+      <AlertFeedFilters
+        filters={makeFilters()}
+        onChange={onChange}
+      />
+    );
+    expect(screen.queryByTestId("filter-clear")).not.toBeInTheDocument();
+  });
+
+  it("calls onChange with action cleared when clear button is clicked", async () => {
+    const onChange = vi.fn();
+    render(
+      <AlertFeedFilters
+        filters={makeFilters({ action: "monitor" })}
+        onChange={onChange}
+      />
+    );
+    await userEvent.click(screen.getByTestId("filter-clear"));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "" })
+    );
+  });
+});

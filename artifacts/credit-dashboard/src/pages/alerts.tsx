@@ -45,7 +45,7 @@ function AlertFeed() {
   const [detailAlert, setDetailAlert] = useState<AlertEvent | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
-  // ── analyst actions (local frontend state) ────────────────────────────────
+  // ── analyst actions (local frontend state — fallback for optimistic updates) ──
   const [actions, setActions] = useState<Record<number, AnalystAction>>({});
 
   // ── API hooks ─────────────────────────────────────────────────────────────
@@ -72,6 +72,7 @@ function AlertFeed() {
       : {}),
     ...(filters.dateFrom !== "" ? { dateFrom: filters.dateFrom } : {}),
     ...(filters.dateTo !== "" ? { dateTo: filters.dateTo } : {}),
+    ...(filters.action !== "" ? { action: filters.action } : {}),
   };
 
   const { data, isLoading, isError, refetch } = useListAlertEvents(params);
@@ -164,9 +165,18 @@ function AlertFeed() {
 
   const handleActionChange = useCallback(
     (id: number, action: AnalystAction) => {
+      // Optimistic local state update
       setActions((prev) => ({ ...prev, [id]: action }));
     },
     [],
+  );
+
+  const handleWorkflowPersisted = useCallback(
+    async (_id: number, _action: AnalystAction) => {
+      // Invalidate the alerts query so workflowAction is refreshed from server
+      await invalidate();
+    },
+    [invalidate],
   );
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -310,7 +320,7 @@ function AlertFeed() {
               onMarkRead={handleMarkRead}
               onClick={handleRowClick}
               markReadPending={markRead.isPending}
-              action={actions[alert.id] ?? null}
+              action={(alert.workflowAction as AnalystAction) ?? actions[alert.id] ?? null}
             />
           ))}
         </div>
@@ -324,8 +334,9 @@ function AlertFeed() {
         onMarkRead={handleMarkRead}
         onMarkUnread={handleMarkUnread}
         markReadPending={markRead.isPending || markUnread.isPending}
-        action={detailAlert ? (actions[detailAlert.id] ?? null) : null}
+        action={detailAlert ? ((detailAlert.workflowAction as AnalystAction) ?? actions[detailAlert.id] ?? null) : null}
         onActionChange={handleActionChange}
+        onWorkflowPersisted={handleWorkflowPersisted}
       />
     </div>
   );

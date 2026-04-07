@@ -739,6 +739,10 @@ export const ListAlertEventsQueryParams = zod.object({
   portfolioLinked: zod.coerce.boolean().optional(),
   dateFrom: zod.date().optional(),
   dateTo: zod.date().optional(),
+  /** Filter by analyst workflow action. Use "unassigned" for alerts with no action. */
+  action: zod.enum(["investigate", "monitor", "ignore", "unassigned"]).optional(),
+  /** Optional user ID for per-user workflow state context. */
+  userId: zod.string().optional(),
   limit: zod.coerce.number().default(listAlertEventsQueryLimitDefault),
   offset: zod.coerce.number().default(listAlertEventsQueryOffsetDefault),
 });
@@ -759,6 +763,10 @@ export const ListAlertEventsResponse = zod.object({
       portfolioLinked: zod.boolean().optional(),
       triggeredAt: zod.coerce.date(),
       isRead: zod.boolean(),
+      /** Persisted analyst workflow action for this alert (org-scoped). */
+      workflowAction: zod.enum(["investigate", "monitor", "ignore"]).nullish(),
+      /** Persisted feedback rating for this alert (org-scoped). */
+      feedbackRating: zod.enum(["useful", "noise", "investigate_later"]).nullish(),
     }),
   ),
   total: zod.number(),
@@ -964,6 +972,39 @@ export const SubmitAlertFeedbackResponse = zod.object({
   note: zod.string().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Upsert analyst workflow action for an alert event
+ */
+export const UpsertAlertWorkflowStateParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpsertAlertWorkflowStateBody = zod.object({
+  action: zod.enum(["investigate", "monitor", "ignore"]),
+  userId: zod.string().nullish(),
+});
+
+export const UpsertAlertWorkflowStateResponse = zod.object({
+  id: zod.number(),
+  alertEventId: zod.number(),
+  organizationId: zod.string(),
+  userId: zod.string().nullish(),
+  action: zod.enum(["investigate", "monitor", "ignore"]),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Clear analyst workflow action for an alert event
+ */
+export const ClearAlertWorkflowStateParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ClearAlertWorkflowStateBody = zod.object({
+  userId: zod.string().nullish(),
 });
 
 /**

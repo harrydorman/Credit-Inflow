@@ -5,6 +5,8 @@
  * Credit Intelligence Dashboard API — Real-time credit risk detection and trade signal platform
  * OpenAPI spec version: 0.3.0
  */
+import type { AlertWorkflowAction } from "./alertWorkflowAction";
+import type { AlertFeedbackRating } from "./alertFeedbackRating";
 
 export interface AlertEvent {
   id: number;
@@ -25,4 +27,8 @@ export interface AlertEvent {
   portfolioLinked?: boolean;
   triggeredAt: Date;
   isRead: boolean;
+  /** Persisted analyst workflow action for this alert (org-scoped). @nullable */
+  workflowAction?: AlertWorkflowAction | null;
+  /** Persisted feedback rating for this alert (org-scoped). @nullable */
+  feedbackRating?: AlertFeedbackRating | null;
 }

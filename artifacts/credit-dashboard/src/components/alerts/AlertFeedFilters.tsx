@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ListAlertEventsSeverity } from "@workspace/api-client-react";
+import type { ListAlertEventsSeverity, AlertWorkflowAction } from "@workspace/api-client-react";
 import type { PriorityLabel } from "@/lib/alertPriority";
 import { X } from "lucide-react";
 
@@ -23,6 +23,8 @@ export interface AlertFilters {
   priority: PriorityLabel | "";
   /** Client-side: show only unread alerts with High or Critical priority */
   unreadHighPriority: boolean;
+  /** Filter by analyst workflow action. "unassigned" for alerts with no action. */
+  action: AlertWorkflowAction | "unassigned" | "";
 }
 
 export const DEFAULT_FILTERS: AlertFilters = {
@@ -35,6 +37,7 @@ export const DEFAULT_FILTERS: AlertFilters = {
   dateTo: "",
   priority: "",
   unreadHighPriority: false,
+  action: "",
 };
 
 interface AlertFeedFiltersProps {
@@ -62,7 +65,8 @@ export function AlertFeedFilters({
     filters.dateFrom !== "" ||
     filters.dateTo !== "" ||
     filters.priority !== "" ||
-    filters.unreadHighPriority;
+    filters.unreadHighPriority ||
+    filters.action !== "";
 
   return (
     <div className="space-y-2" data-testid="alert-feed-filters">
@@ -156,6 +160,28 @@ export function AlertFeedFilters({
         >
           Unread + High
         </Button>
+
+        {/* Analyst action */}
+        <Select
+          value={filters.action || "all"}
+          onValueChange={(v) =>
+            set("action", v === "all" ? "" : (v as AlertFilters["action"]))
+          }
+        >
+          <SelectTrigger
+            className="h-7 text-xs font-mono w-36"
+            data-testid="filter-action"
+          >
+            <SelectValue placeholder="Action" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All actions</SelectItem>
+            <SelectItem value="investigate">Investigate</SelectItem>
+            <SelectItem value="monitor">Monitor</SelectItem>
+            <SelectItem value="ignore">Ignore</SelectItem>
+            <SelectItem value="unassigned">Unassigned</SelectItem>
+          </SelectContent>
+        </Select>
 
         {/* Issuer */}
         <Input

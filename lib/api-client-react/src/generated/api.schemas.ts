@@ -505,6 +505,30 @@ export interface AlertRuleList {
   total: number;
 }
 
+export type AlertWorkflowAction =
+  (typeof AlertWorkflowAction)[keyof typeof AlertWorkflowAction];
+
+export const AlertWorkflowAction = {
+  investigate: "investigate",
+  monitor: "monitor",
+  ignore: "ignore",
+} as const;
+
+export interface AlertWorkflowState {
+  id: number;
+  alertEventId: number;
+  organizationId: string;
+  userId?: string | null;
+  action: AlertWorkflowAction;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertAlertWorkflowStateRequest {
+  action: AlertWorkflowAction;
+  userId?: string | null;
+}
+
 export interface AlertEvent {
   id: number;
   alertRuleId: number;
@@ -516,8 +540,17 @@ export interface AlertEvent {
   urgency?: number | null;
   /** @nullable */
   eventType?: string | null;
+  /** @nullable */
+  confidence?: number | null;
+  /** @nullable */
+  severity?: "high" | "medium" | "low" | null;
+  portfolioLinked?: boolean;
   triggeredAt: string;
   isRead: boolean;
+  /** Persisted analyst workflow action for this alert (org-scoped). @nullable */
+  workflowAction?: AlertWorkflowAction | null;
+  /** Persisted feedback rating for this alert (org-scoped). @nullable */
+  feedbackRating?: AlertFeedbackRating | null;
 }
 
 export interface AlertEventList {
@@ -729,6 +762,10 @@ export type ListAlertEventsParams = {
   portfolioLinked?: boolean;
   dateFrom?: string;
   dateTo?: string;
+  /** Filter by analyst workflow action. Use "unassigned" for alerts with no action set. */
+  action?: AlertWorkflowAction | "unassigned";
+  /** Optional user ID for per-user workflow state context. */
+  userId?: string;
   limit?: number;
   offset?: number;
 };
