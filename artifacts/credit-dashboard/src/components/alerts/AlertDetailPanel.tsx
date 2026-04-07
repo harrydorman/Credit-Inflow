@@ -42,6 +42,7 @@ import {
   ANALYST_ACTION_STYLES,
   type AnalystAction,
   type RankingContext,
+  RANKING_MODE,
 } from "@/lib/alertPriority";
 import { useToast } from "@/hooks/use-toast";
 
@@ -92,6 +93,12 @@ function severityColor(s: string): string {
   if (s === "high") return "text-destructive";
   if (s === "medium") return "text-amber-500";
   return "text-green-500";
+}
+
+function adjustmentColor(delta: number): string {
+  if (delta > 0) return "text-green-400";
+  if (delta < 0) return "text-destructive";
+  return "text-muted-foreground";
 }
 
 function buildTriggerReason(alert: AlertEvent): string {
@@ -347,7 +354,7 @@ export function AlertDetailPanel({
             </p>
           </div>
 
-          {/* Priority explanation */}
+          {/* Priority explanation + ranking breakdown */}
           <div
             className="rounded-md bg-secondary/20 border border-border px-3 py-2.5"
             data-testid="priority-section"
@@ -364,6 +371,70 @@ export function AlertDetailPanel({
             <p className="text-xs text-foreground" data-testid="priority-explanation">
               {priority.explanation}
             </p>
+
+            {/* Ranking breakdown */}
+            {priority.breakdown && (
+              <div
+                className="mt-2.5 pt-2.5 border-t border-border/50"
+                data-testid="ranking-breakdown"
+              >
+                <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide mb-1.5">
+                  Score breakdown
+                </p>
+                <div className="space-y-1 text-[11px] font-mono">
+                  {/* Base score row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Base score</span>
+                    <span className="text-foreground font-medium" data-testid="breakdown-base-score">
+                      {priority.breakdown.baseScore}
+                    </span>
+                  </div>
+                  {/* Analytics adjustment row (only shown when non-zero or analytics mode) */}
+                  {RANKING_MODE === "analytics-informed" && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Analytics adjustment</span>
+                      <span
+                        className={`font-medium ${adjustmentColor(priority.breakdown.analyticsAdjustment)}`}
+                        data-testid="breakdown-analytics-adjustment"
+                      >
+                        {priority.breakdown.analyticsAdjustment > 0 ? "+" : ""}
+                        {priority.breakdown.analyticsAdjustment}
+                      </span>
+                    </div>
+                  )}
+                  {/* Final score row */}
+                  <div className="flex items-center justify-between border-t border-border/40 pt-1 mt-1">
+                    <span className="text-foreground font-bold">Final score</span>
+                    <span className="text-foreground font-bold" data-testid="breakdown-final-score">
+                      {priority.breakdown.finalScore}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Adjustment reason badges */}
+                {(priority.breakdown.eventTypeBoost > 0 ||
+                  priority.breakdown.issuerBoost > 0 ||
+                  priority.breakdown.ruleNoisePenalty > 0) && (
+                  <div className="mt-2 flex flex-wrap gap-1" data-testid="adjustment-badges">
+                    {priority.breakdown.eventTypeBoost > 0 && (
+                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono bg-green-950/50 text-green-400 border border-green-800/50">
+                        +{priority.breakdown.eventTypeBoost} event type
+                      </span>
+                    )}
+                    {priority.breakdown.issuerBoost > 0 && (
+                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono bg-green-950/50 text-green-400 border border-green-800/50">
+                        +{priority.breakdown.issuerBoost} issuer
+                      </span>
+                    )}
+                    {priority.breakdown.ruleNoisePenalty > 0 && (
+                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono bg-red-950/50 text-destructive border border-red-800/50">
+                        −{priority.breakdown.ruleNoisePenalty} noise
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Analyst actions */}

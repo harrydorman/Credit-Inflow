@@ -19,6 +19,7 @@ import Alerts from "@/pages/alerts";
 import Portfolios from "@/pages/portfolios";
 import PortfolioDetail from "@/pages/portfolio-detail";
 import Analytics from "@/pages/analytics";
+import RankingEval from "@/pages/ranking-eval";
 
 // Wire up organization ID for all API calls (dev/demo mode).
 // Replace getOrgId() with your auth provider in production.
@@ -42,6 +43,7 @@ function Router() {
       <Route path="/portfolios" component={Portfolios} />
       <Route path="/portfolios/:id" component={PortfolioDetail} />
       <Route path="/analytics" component={Analytics} />
+      <Route path="/ranking-eval" component={RankingEval} />
       <Route component={NotFound} />
     </Switch>
   );
