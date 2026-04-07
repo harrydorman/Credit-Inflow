@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Activity, Bell, Briefcase, Building, FileText, Home, Layers, Newspaper, RefreshCw, Bookmark, Zap } from "lucide-react";
+import { Activity, BarChart3, Bell, Briefcase, Building, FileText, Home, Layers, Newspaper, RefreshCw, Bookmark, Zap } from "lucide-react";
 import { useTriggerRefresh } from "@workspace/api-client-react";
 import { Button } from "./ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -43,6 +43,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/watchlists", label: "Watchlists", icon: Bookmark },
     { href: "/portfolios", label: "Portfolios", icon: Briefcase },
     { href: "/alerts", label: "Alerts", icon: Bell },
+    { href: "/analytics", label: "Analytics", icon: BarChart3 },
   ];
 
   return (

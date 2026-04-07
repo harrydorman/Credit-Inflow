@@ -794,3 +794,95 @@ export type GetPortfolioDetailsParams = {
 export type IngestPortfolioCSVBody = {
   csv: string;
 };
+
+// ---------------------------------------------------------------------------
+// Analytics
+// ---------------------------------------------------------------------------
+
+export type AlertAnalyticsActionCount = {
+  action: string;
+  count: number;
+};
+
+export type AlertAnalyticsFeedbackCount = {
+  rating: string;
+  count: number;
+};
+
+export type AlertAnalyticsActionByEventType = {
+  eventType: string;
+  investigate: number;
+  monitor: number;
+  ignore: number;
+  total: number;
+};
+
+export type AlertAnalyticsFeedbackByEventType = {
+  eventType: string;
+  useful: number;
+  noise: number;
+  investigate_later: number;
+  total: number;
+};
+
+export type AlertAnalyticsIssuerRatio = {
+  issuerName: string;
+  investigateCount: number;
+  ignoreCount: number;
+  monitorCount: number;
+  total: number;
+  investigateRatio: number;
+  ignoreRatio: number;
+};
+
+export type AlertAnalyticsRuleRatio = {
+  ruleId: number;
+  ruleName: string;
+  usefulCount: number;
+  noiseCount: number;
+  total: number;
+  noiseRatio: number;
+  usefulRatio: number;
+};
+
+export type AlertAnalyticsPortfolioWorkflowBucket = {
+  investigate: number;
+  monitor: number;
+  ignore: number;
+  total: number;
+};
+
+export type AlertAnalytics = {
+  workflowActionCounts: AlertAnalyticsActionCount[];
+  feedbackRatingCounts: AlertAnalyticsFeedbackCount[];
+  actionByEventType: AlertAnalyticsActionByEventType[];
+  feedbackByEventType: AlertAnalyticsFeedbackByEventType[];
+  investigateIgnoreRatioByIssuer: AlertAnalyticsIssuerRatio[];
+  usefulNoiseRatioByRule: AlertAnalyticsRuleRatio[];
+  portfolioLinkedWorkflowCounts: {
+    portfolioLinked: AlertAnalyticsPortfolioWorkflowBucket;
+    nonPortfolioLinked: AlertAnalyticsPortfolioWorkflowBucket;
+  };
+  rankingPrep: {
+    eventTypeUsefulnessScores: {
+      eventType: string;
+      usefulCount: number;
+      noiseCount: number;
+      totalFeedback: number;
+      usefulnessScore: number;
+    }[];
+    issuerInvestigateScores: {
+      issuerName: string;
+      investigateCount: number;
+      totalWorkflow: number;
+      investigateScore: number;
+    }[];
+    ruleNoiseScores: {
+      ruleId: number;
+      ruleName: string;
+      noiseCount: number;
+      totalFeedback: number;
+      noiseScore: number;
+    }[];
+  };
+};

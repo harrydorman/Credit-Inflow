@@ -1122,6 +1122,106 @@ export const IngestPortfolioCSVResponse = zod.object({
 });
 
 /**
+ * @summary Get workflow + feedback analytics for the authenticated org
+ */
+export const GetAlertAnalyticsResponse = zod.object({
+  workflowActionCounts: zod.array(
+    zod.object({
+      action: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  feedbackRatingCounts: zod.array(
+    zod.object({
+      rating: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  actionByEventType: zod.array(
+    zod.object({
+      eventType: zod.string(),
+      investigate: zod.number(),
+      monitor: zod.number(),
+      ignore: zod.number(),
+      total: zod.number(),
+    }),
+  ),
+  feedbackByEventType: zod.array(
+    zod.object({
+      eventType: zod.string(),
+      useful: zod.number(),
+      noise: zod.number(),
+      investigate_later: zod.number(),
+      total: zod.number(),
+    }),
+  ),
+  investigateIgnoreRatioByIssuer: zod.array(
+    zod.object({
+      issuerName: zod.string(),
+      investigateCount: zod.number(),
+      ignoreCount: zod.number(),
+      monitorCount: zod.number(),
+      total: zod.number(),
+      investigateRatio: zod.number(),
+      ignoreRatio: zod.number(),
+    }),
+  ),
+  usefulNoiseRatioByRule: zod.array(
+    zod.object({
+      ruleId: zod.number(),
+      ruleName: zod.string(),
+      usefulCount: zod.number(),
+      noiseCount: zod.number(),
+      total: zod.number(),
+      noiseRatio: zod.number(),
+      usefulRatio: zod.number(),
+    }),
+  ),
+  portfolioLinkedWorkflowCounts: zod.object({
+    portfolioLinked: zod.object({
+      investigate: zod.number(),
+      monitor: zod.number(),
+      ignore: zod.number(),
+      total: zod.number(),
+    }),
+    nonPortfolioLinked: zod.object({
+      investigate: zod.number(),
+      monitor: zod.number(),
+      ignore: zod.number(),
+      total: zod.number(),
+    }),
+  }),
+  rankingPrep: zod.object({
+    eventTypeUsefulnessScores: zod.array(
+      zod.object({
+        eventType: zod.string(),
+        usefulCount: zod.number(),
+        noiseCount: zod.number(),
+        totalFeedback: zod.number(),
+        usefulnessScore: zod.number(),
+      }),
+    ),
+    issuerInvestigateScores: zod.array(
+      zod.object({
+        issuerName: zod.string(),
+        investigateCount: zod.number(),
+        totalWorkflow: zod.number(),
+        investigateScore: zod.number(),
+      }),
+    ),
+    ruleNoiseScores: zod.array(
+      zod.object({
+        ruleId: zod.number(),
+        ruleName: zod.string(),
+        noiseCount: zod.number(),
+        totalFeedback: zod.number(),
+        noiseScore: zod.number(),
+      }),
+    ),
+  }),
+});
+
+/**
  * @summary Get alert events grouped by issuer for portfolio exposure
  */
 export const GetPortfolioExposureAlertsParams = zod.object({
