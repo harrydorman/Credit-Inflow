@@ -1,5 +1,56 @@
 import type { AlertEvent } from "@workspace/api-client-react";
 
+// ─── ranking model version ────────────────────────────────────────────────────
+
+/**
+ * Versioned identifier for the ranking model.
+ *
+ * Bump this constant whenever weights, thresholds, or the scoring logic
+ * changes so that breakdowns and evaluation outputs can be correlated with
+ * the model that produced them.
+ *
+ * Format: "v<major>.<minor>.<patch>"
+ */
+export const RANKING_MODEL_VERSION = "v1.1.0";
+
+// ─── calibration config ───────────────────────────────────────────────────────
+
+/**
+ * Centralised ranking calibration config.
+ *
+ * All threshold and max-weight constants are defined here so that tuning a
+ * single parameter requires a one-line change, and every compute function
+ * automatically picks up the new value.
+ *
+ * To re-calibrate safely:
+ *   1. Edit the value here.
+ *   2. Bump RANKING_MODEL_VERSION.
+ *   3. Run tests — score-consistency tests will confirm existing behaviour
+ *      or highlight the intended change.
+ */
+export const RANKING_CALIBRATION_CONFIG = {
+  eventTypeBoost: {
+    /** Minimum usefulness score before a boost applies (0–1). */
+    threshold: 0.7,
+    /** Maximum points that can be added for a useful event type. */
+    max: 8,
+  },
+  issuerBoost: {
+    /** Minimum investigate-rate before a boost applies (0–1). */
+    threshold: 0.6,
+    /** Maximum points that can be added for a high-investigate-rate issuer. */
+    max: 8,
+  },
+  ruleNoisePenalty: {
+    /** Minimum noise-rate before a penalty applies (0–1). */
+    threshold: 0.5,
+    /** Maximum points that can be deducted for a high-noise rule. */
+    max: 8,
+  },
+  /** Hard cap on the absolute value of the total analytics adjustment. */
+  totalAdjustmentCap: 15,
+} as const;
+
 // ─── types ────────────────────────────────────────────────────────────────────
 
 export type PriorityLabel = "Critical" | "High" | "Medium" | "Low";
@@ -51,6 +102,8 @@ export interface RankingBreakdown {
   finalLabel: PriorityLabel;
   /** True when analyticsAdjustment !== 0 */
   analyticsAdjusted: boolean;
+  /** Ranking model version that produced this breakdown */
+  modelVersion: string;
 }
 
 /**
@@ -91,23 +144,26 @@ const MAX_URGENCY_SCORE = 10;
 
 // ─── analytics adjustment constants ──────────────────────────────────────────
 
+// Convenience aliases — keep these so existing code that imports
+// MAX_TOTAL_ADJUSTMENT continues to compile without changes.
+
 /** Minimum usefulness score before an event-type boost applies. */
-const EVENT_TYPE_BOOST_THRESHOLD = 0.7;
+const EVENT_TYPE_BOOST_THRESHOLD = RANKING_CALIBRATION_CONFIG.eventTypeBoost.threshold;
 /** Max points added for a highly useful event type. */
-const EVENT_TYPE_BOOST_MAX = 8;
+const EVENT_TYPE_BOOST_MAX = RANKING_CALIBRATION_CONFIG.eventTypeBoost.max;
 
 /** Minimum investigate-rate before an issuer boost applies. */
-const ISSUER_INVESTIGATE_THRESHOLD = 0.6;
+const ISSUER_INVESTIGATE_THRESHOLD = RANKING_CALIBRATION_CONFIG.issuerBoost.threshold;
 /** Max points added for a high-investigate-rate issuer. */
-const ISSUER_INVESTIGATE_BOOST_MAX = 8;
+const ISSUER_INVESTIGATE_BOOST_MAX = RANKING_CALIBRATION_CONFIG.issuerBoost.max;
 
 /** Minimum noise rate before a rule penalty applies. */
-const RULE_NOISE_THRESHOLD = 0.5;
+const RULE_NOISE_THRESHOLD = RANKING_CALIBRATION_CONFIG.ruleNoisePenalty.threshold;
 /** Max points deducted for a high-noise rule. */
-const RULE_NOISE_PENALTY_MAX = 8;
+const RULE_NOISE_PENALTY_MAX = RANKING_CALIBRATION_CONFIG.ruleNoisePenalty.max;
 
 /** Hard cap on the absolute value of the total analytics adjustment. */
-export const MAX_TOTAL_ADJUSTMENT = 15;
+export const MAX_TOTAL_ADJUSTMENT = RANKING_CALIBRATION_CONFIG.totalAdjustmentCap;
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -237,6 +293,7 @@ export function computeRankingBreakdown(
     finalScore,
     finalLabel,
     analyticsAdjusted,
+    modelVersion: RANKING_MODEL_VERSION,
   };
 }
 

@@ -9,6 +9,12 @@ import {
   fractionBoostedAndUseful,
   fractionPenalisedAndNoisy,
   fractionPortfolioLinkedBoosted,
+  filterAlertsByTimeWindow,
+  computeWindowedMetrics,
+  computeTrendMetrics,
+  computeMultiWindowTrends,
+  type TimeWindow,
+  TIME_WINDOW_LABELS,
 } from "./rankingEvaluation";
 import { RANKING_MODE, type RankingContext } from "./alertPriority";
 import type { AlertEvent } from "@workspace/api-client-react";
@@ -261,5 +267,222 @@ describe("fractionPortfolioLinkedBoosted", () => {
     const result = fractionPortfolioLinkedBoosted(comparisons, alerts);
     expect(result).toBeGreaterThanOrEqual(0);
     expect(result).toBeLessThanOrEqual(1);
+  });
+});
+
+// ─── TIME_WINDOW_LABELS ───────────────────────────────────────────────────────
+
+describe("TIME_WINDOW_LABELS", () => {
+  it("has labels for all three windows", () => {
+    const windows: TimeWindow[] = ["7d", "30d", "all"];
+    for (const w of windows) {
+      expect(typeof TIME_WINDOW_LABELS[w]).toBe("string");
+      expect(TIME_WINDOW_LABELS[w].length).toBeGreaterThan(0);
+    }
+  });
+});
+
+// ─── filterAlertsByTimeWindow ─────────────────────────────────────────────────
+
+describe("filterAlertsByTimeWindow", () => {
+  const now = new Date("2024-03-15T12:00:00Z");
+
+  const alertRecent3d = makeAlert({ id: 1, triggeredAt: new Date("2024-03-13T10:00:00Z").toISOString() });
+  const alertRecent10d = makeAlert({ id: 2, triggeredAt: new Date("2024-03-05T10:00:00Z").toISOString() });
+  const alertOld60d = makeAlert({ id: 3, triggeredAt: new Date("2024-01-14T10:00:00Z").toISOString() });
+  const alertNoTimestamp = makeAlert({ id: 4, triggeredAt: undefined as unknown as string });
+
+  it("'all' returns all alerts including those without timestamps", () => {
+    const result = filterAlertsByTimeWindow(
+      [alertRecent3d, alertRecent10d, alertOld60d, alertNoTimestamp],
+      "all",
+      now,
+    );
+    expect(result).toHaveLength(4);
+  });
+
+  it("'7d' returns only alerts within the last 7 days", () => {
+    const result = filterAlertsByTimeWindow(
+      [alertRecent3d, alertRecent10d, alertOld60d],
+      "7d",
+      now,
+    );
+    expect(result.map((a) => a.id)).toContain(1);
+    expect(result.map((a) => a.id)).not.toContain(2);
+    expect(result.map((a) => a.id)).not.toContain(3);
+  });
+
+  it("'30d' returns only alerts within the last 30 days", () => {
+    const result = filterAlertsByTimeWindow(
+      [alertRecent3d, alertRecent10d, alertOld60d],
+      "30d",
+      now,
+    );
+    expect(result.map((a) => a.id)).toContain(1);
+    expect(result.map((a) => a.id)).toContain(2);
+    expect(result.map((a) => a.id)).not.toContain(3);
+  });
+
+  it("'7d' excludes alerts without triggeredAt", () => {
+    const result = filterAlertsByTimeWindow([alertNoTimestamp], "7d", now);
+    expect(result).toHaveLength(0);
+  });
+
+  it("'30d' excludes alerts without triggeredAt", () => {
+    const result = filterAlertsByTimeWindow([alertNoTimestamp], "30d", now);
+    expect(result).toHaveLength(0);
+  });
+
+  it("returns empty array when no alerts match the window", () => {
+    const result = filterAlertsByTimeWindow([alertOld60d], "7d", now);
+    expect(result).toHaveLength(0);
+  });
+
+  it("returns empty array for empty input", () => {
+    expect(filterAlertsByTimeWindow([], "7d", now)).toHaveLength(0);
+    expect(filterAlertsByTimeWindow([], "30d", now)).toHaveLength(0);
+    expect(filterAlertsByTimeWindow([], "all", now)).toHaveLength(0);
+  });
+
+  it("alert exactly at the 7d boundary is included", () => {
+    const exactBoundary = makeAlert({
+      id: 10,
+      triggeredAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+    const result = filterAlertsByTimeWindow([exactBoundary], "7d", now);
+    expect(result).toHaveLength(1);
+  });
+});
+
+// ─── computeWindowedMetrics ───────────────────────────────────────────────────
+
+describe("computeWindowedMetrics", () => {
+  const now = new Date("2024-03-15T12:00:00Z");
+
+  it("returns zero-metrics for an empty time window", () => {
+    const alert = makeAlert({
+      id: 1,
+      triggeredAt: new Date("2024-01-01T00:00:00Z").toISOString(),
+    });
+    const metrics = computeWindowedMetrics([alert], undefined, "7d", now);
+    expect(metrics.totalAlerts).toBe(0);
+  });
+
+  it("counts only alerts inside the window", () => {
+    const recent = makeAlert({ id: 1, triggeredAt: new Date("2024-03-13T00:00:00Z").toISOString() });
+    const old = makeAlert({ id: 2, triggeredAt: new Date("2024-01-01T00:00:00Z").toISOString() });
+    const metrics = computeWindowedMetrics([recent, old], undefined, "7d", now);
+    expect(metrics.totalAlerts).toBe(1);
+  });
+
+  it("'all' window includes all alerts", () => {
+    const alerts = [
+      makeAlert({ id: 1, triggeredAt: new Date("2024-03-13T00:00:00Z").toISOString() }),
+      makeAlert({ id: 2, triggeredAt: new Date("2024-01-01T00:00:00Z").toISOString() }),
+      makeAlert({ id: 3, triggeredAt: new Date("2023-06-01T00:00:00Z").toISOString() }),
+    ];
+    const metrics = computeWindowedMetrics(alerts, undefined, "all", now);
+    expect(metrics.totalAlerts).toBe(3);
+  });
+});
+
+// ─── computeTrendMetrics ──────────────────────────────────────────────────────
+
+describe("computeTrendMetrics", () => {
+  const now = new Date("2024-03-15T12:00:00Z");
+
+  it("returns correct window identifier", () => {
+    const result = computeTrendMetrics([], undefined, "7d", () => false, () => false, now);
+    expect(result.window).toBe("7d");
+  });
+
+  it("returns zero alertCount for empty input", () => {
+    const result = computeTrendMetrics([], undefined, "all", () => false, () => false, now);
+    expect(result.alertCount).toBe(0);
+    expect(result.usefulFeedbackRateAmongBoosted).toBe(0);
+    expect(result.noiseRateAmongPenalised).toBe(0);
+    expect(result.investigateRateAmongPortfolioLinkedBoosted).toBe(0);
+  });
+
+  it("alertCount reflects only alerts within the time window", () => {
+    const recent = makeAlert({ id: 1, triggeredAt: new Date("2024-03-13T00:00:00Z").toISOString() });
+    const old = makeAlert({ id: 2, triggeredAt: new Date("2024-01-01T00:00:00Z").toISOString() });
+    const result = computeTrendMetrics(
+      [recent, old],
+      undefined,
+      "7d",
+      () => false,
+      () => false,
+      now,
+    );
+    expect(result.alertCount).toBe(1);
+  });
+
+  it("usefulFeedbackRateAmongBoosted is 0 when no boosted alerts", () => {
+    const alert = makeAlert({ id: 1, triggeredAt: new Date("2024-03-13T00:00:00Z").toISOString() });
+    const result = computeTrendMetrics([alert], undefined, "7d", () => true, () => false, now);
+    expect(result.usefulFeedbackRateAmongBoosted).toBe(0);
+  });
+
+  it("noiseRateAmongPenalised is 0 when no penalised alerts", () => {
+    const alert = makeAlert({ id: 1, triggeredAt: new Date("2024-03-13T00:00:00Z").toISOString() });
+    const result = computeTrendMetrics([alert], undefined, "7d", () => false, () => true, now);
+    expect(result.noiseRateAmongPenalised).toBe(0);
+  });
+
+  it("all metric values are in [0, 1] range", () => {
+    if (RANKING_MODE !== "analytics-informed") return;
+    const alert = makeAlert({
+      id: 1,
+      severity: "low",
+      confidence: 0.2,
+      portfolioLinked: true,
+      triggeredAt: new Date("2024-03-13T00:00:00Z").toISOString(),
+    });
+    const getCtx = () => ({ eventTypeUsefulnessScore: 1.0 } as RankingContext);
+    const result = computeTrendMetrics([alert], getCtx, "7d", () => true, () => true, now);
+    expect(result.usefulFeedbackRateAmongBoosted).toBeGreaterThanOrEqual(0);
+    expect(result.usefulFeedbackRateAmongBoosted).toBeLessThanOrEqual(1);
+    expect(result.noiseRateAmongPenalised).toBeGreaterThanOrEqual(0);
+    expect(result.noiseRateAmongPenalised).toBeLessThanOrEqual(1);
+    expect(result.investigateRateAmongPortfolioLinkedBoosted).toBeGreaterThanOrEqual(0);
+    expect(result.investigateRateAmongPortfolioLinkedBoosted).toBeLessThanOrEqual(1);
+  });
+});
+
+// ─── computeMultiWindowTrends ─────────────────────────────────────────────────
+
+describe("computeMultiWindowTrends", () => {
+  const now = new Date("2024-03-15T12:00:00Z");
+
+  it("returns one result per requested window", () => {
+    const windows: TimeWindow[] = ["7d", "30d", "all"];
+    const results = computeMultiWindowTrends([], undefined, windows, () => false, () => false, now);
+    expect(results).toHaveLength(3);
+    expect(results[0].window).toBe("7d");
+    expect(results[1].window).toBe("30d");
+    expect(results[2].window).toBe("all");
+  });
+
+  it("7d result has fewer or equal alerts than 30d result", () => {
+    const alerts = [
+      makeAlert({ id: 1, triggeredAt: new Date("2024-03-13T00:00:00Z").toISOString() }),
+      makeAlert({ id: 2, triggeredAt: new Date("2024-02-20T00:00:00Z").toISOString() }),
+      makeAlert({ id: 3, triggeredAt: new Date("2024-01-01T00:00:00Z").toISOString() }),
+    ];
+    const [w7, w30] = computeMultiWindowTrends(
+      alerts,
+      undefined,
+      ["7d", "30d"],
+      () => false,
+      () => false,
+      now,
+    );
+    expect(w7.alertCount).toBeLessThanOrEqual(w30.alertCount);
+  });
+
+  it("returns empty array for empty windows list", () => {
+    const results = computeMultiWindowTrends([], undefined, [], () => false, () => false, now);
+    expect(results).toHaveLength(0);
   });
 });

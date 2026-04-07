@@ -2,13 +2,14 @@
  * pages/ranking-eval.tsx
  *
  * Phase 10: Internal ranking evaluation page.
+ * Phase 11: Ranking Calibration + Time-Windowed Evaluation.
  *
- * Compares baseline vs analytics-informed scores for all loaded alerts,
- * showing which alerts moved up or down and aggregate adjustment metrics.
+ * Compares baseline vs analytics-informed scores for alerts in the selected
+ * time window, showing aggregate calibration metrics and per-alert breakdowns.
  * This is an admin/internal page — not linked in the main navigation.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useListAlertEvents, useGetAlertAnalytics } from "@workspace/api-client-react";
 import type { AlertEvent } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
@@ -17,13 +18,18 @@ import {
   buildAnalyticsIndex,
   buildRankingContext,
   RANKING_MODE,
+  RANKING_MODEL_VERSION,
+  RANKING_CALIBRATION_CONFIG,
 } from "@/lib/alertPriority";
 import {
   compareAlertRankings,
   computeRankingMetrics,
+  filterAlertsByTimeWindow,
   type AlertRankingComparison,
+  type TimeWindow,
+  TIME_WINDOW_LABELS,
 } from "@/lib/rankingEvaluation";
-import { TrendingUp, TrendingDown, Minus, BarChart2, AlertCircle } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, BarChart2, AlertCircle, Settings2 } from "lucide-react";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -107,9 +113,83 @@ function ComparisonRow({ c }: { c: AlertRankingComparison }) {
   );
 }
 
+// ─── calibration config panel ─────────────────────────────────────────────────
+
+function CalibrationConfigPanel() {
+  const cfg = RANKING_CALIBRATION_CONFIG;
+  return (
+    <div
+      className="rounded-md border border-border bg-secondary/10 px-4 py-3 space-y-2"
+      data-testid="calibration-config-panel"
+    >
+      <div className="flex items-center gap-1.5 mb-1">
+        <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+        <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
+          Calibration config · model {RANKING_MODEL_VERSION}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono">
+        <div className="space-y-0.5">
+          <p className="text-muted-foreground">Event type boost</p>
+          <p className="text-foreground">
+            threshold {cfg.eventTypeBoost.threshold} · max +{cfg.eventTypeBoost.max}
+          </p>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-muted-foreground">Issuer boost</p>
+          <p className="text-foreground">
+            threshold {cfg.issuerBoost.threshold} · max +{cfg.issuerBoost.max}
+          </p>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-muted-foreground">Rule noise penalty</p>
+          <p className="text-foreground">
+            threshold {cfg.ruleNoisePenalty.threshold} · max −{cfg.ruleNoisePenalty.max}
+          </p>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-muted-foreground">Total adj. cap</p>
+          <p className="text-foreground">±{cfg.totalAdjustmentCap} pts</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── time window selector ─────────────────────────────────────────────────────
+
+function TimeWindowSelector({
+  value,
+  onChange,
+}: {
+  value: TimeWindow;
+  onChange: (w: TimeWindow) => void;
+}) {
+  const windows: TimeWindow[] = ["7d", "30d", "all"];
+  return (
+    <div className="flex gap-1" data-testid="time-window-selector">
+      {windows.map((w) => (
+        <button
+          key={w}
+          onClick={() => onChange(w)}
+          className={`px-2.5 py-1 rounded text-[11px] font-mono border transition-colors ${
+            value === w
+              ? "bg-primary text-primary-foreground border-primary"
+              : "bg-secondary/30 text-muted-foreground border-border hover:bg-secondary/50"
+          }`}
+        >
+          {TIME_WINDOW_LABELS[w]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ─── page ─────────────────────────────────────────────────────────────────────
 
 export default function RankingEvalPage() {
+  const [timeWindow, setTimeWindow] = useState<TimeWindow>("all");
+
   const { data: alertsData, isLoading: alertsLoading } = useListAlertEvents({ limit: 500 });
   const { data: analyticsData, isLoading: analyticsLoading } =
     useGetAlertAnalytics();
@@ -131,14 +211,20 @@ export default function RankingEvalPage() {
       buildRankingContext(alert as AlertEvent & { ruleName?: string | null }, analyticsIndex);
   }, [analyticsIndex]);
 
+  // Apply time-window filter before computing comparisons
+  const windowedAlerts = useMemo(
+    () => filterAlertsByTimeWindow(alerts, timeWindow),
+    [alerts, timeWindow],
+  );
+
   const comparisons = useMemo(
-    () => compareAlertRankings(alerts, getCtx),
-    [alerts, getCtx],
+    () => compareAlertRankings(windowedAlerts, getCtx),
+    [windowedAlerts, getCtx],
   );
 
   const metrics = useMemo(
-    () => computeRankingMetrics(comparisons, alerts),
-    [comparisons, alerts],
+    () => computeRankingMetrics(comparisons, windowedAlerts),
+    [comparisons, windowedAlerts],
   );
 
   const movedUp = comparisons.filter((c) => c.scoreDelta > 0);
@@ -161,18 +247,31 @@ export default function RankingEvalPage() {
             >
               Internal
             </Badge>
+            <Badge
+              variant="outline"
+              className="text-[10px] font-mono text-muted-foreground border-border"
+              data-testid="model-version-badge"
+            >
+              {RANKING_MODEL_VERSION}
+            </Badge>
           </div>
-          <p className="text-sm text-muted-foreground font-mono">
-            Baseline vs analytics-informed score comparison ·{" "}
-            <span className="text-primary">
-              {RANKING_MODE === "analytics-informed"
-                ? "Analytics-informed mode active"
-                : "Baseline mode active"}
-            </span>
-          </p>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="text-sm text-muted-foreground font-mono">
+              Baseline vs analytics-informed score comparison ·{" "}
+              <span className="text-primary">
+                {RANKING_MODE === "analytics-informed"
+                  ? "Analytics-informed mode active"
+                  : "Baseline mode active"}
+              </span>
+            </p>
+            <TimeWindowSelector value={timeWindow} onChange={setTimeWindow} />
+          </div>
         </div>
 
         <Separator />
+
+        {/* Calibration config */}
+        <CalibrationConfigPanel />
 
         {isLoading && (
           <p className="text-sm font-mono text-muted-foreground animate-pulse">
@@ -187,12 +286,21 @@ export default function RankingEvalPage() {
           </div>
         )}
 
-        {!isLoading && alerts.length > 0 && (
+        {!isLoading && alerts.length > 0 && windowedAlerts.length === 0 && (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <AlertCircle className="h-4 w-4" />
+            <p className="text-sm font-mono">
+              No alerts in the selected time window ({TIME_WINDOW_LABELS[timeWindow]}).
+            </p>
+          </div>
+        )}
+
+        {!isLoading && windowedAlerts.length > 0 && (
           <>
             {/* Aggregate metrics */}
             <div>
               <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide mb-2">
-                Aggregate metrics
+                Aggregate metrics · {TIME_WINDOW_LABELS[timeWindow]}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <MetricCard
