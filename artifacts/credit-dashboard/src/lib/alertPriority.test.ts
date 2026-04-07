@@ -4,6 +4,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computePriorityScore,
+  computeRankingBreakdown,
   getPriorityLabel,
   getPriorityExplanation,
   getAlertPriority,
@@ -509,5 +510,124 @@ describe("buildRankingContext", () => {
     expect(ctx.eventTypeUsefulnessScore).toBeUndefined();
     expect(ctx.issuerInvestigateScore).toBeUndefined();
     expect(ctx.ruleNoiseScore).toBeUndefined();
+  });
+});
+
+// ─── computeRankingBreakdown ──────────────────────────────────────────────────
+
+describe("computeRankingBreakdown", () => {
+  it("returns all structured components for a baseline alert", () => {
+    const alert = makeAlert({
+      severity: "high",
+      confidence: 1.0,
+      portfolioLinked: true,
+      urgency: 10,
+    });
+    const bd = computeRankingBreakdown(alert);
+    expect(bd.severityScore).toBe(40);
+    expect(bd.confidenceScore).toBe(30);
+    expect(bd.portfolioScore).toBe(20);
+    expect(bd.urgencyScore).toBe(10);
+    expect(bd.baseScore).toBe(100);
+    expect(bd.analyticsAdjustment).toBe(0);
+    expect(bd.finalScore).toBe(100);
+    expect(bd.analyticsAdjusted).toBe(false);
+  });
+
+  it("base + analyticsAdjustment = finalScore (breakdown consistency)", () => {
+    if (RANKING_MODE !== "analytics-informed") return;
+    const alert = makeAlert({ severity: "medium", confidence: 0.5, urgency: 5 });
+    const ctx: RankingContext = { eventTypeUsefulnessScore: 1.0 };
+    const bd = computeRankingBreakdown(alert, ctx);
+    expect(bd.finalScore).toBe(Math.max(0, Math.min(100, bd.baseScore + bd.analyticsAdjustment)));
+  });
+
+  it("analyticsAdjustment is 0 when no context supplied", () => {
+    const alert = makeAlert();
+    const bd = computeRankingBreakdown(alert);
+    expect(bd.analyticsAdjustment).toBe(0);
+    expect(bd.eventTypeBoost).toBe(0);
+    expect(bd.issuerBoost).toBe(0);
+    expect(bd.ruleNoisePenalty).toBe(0);
+  });
+
+  it("eventTypeBoost is nonzero when event type usefulness is high (analytics-informed)", () => {
+    if (RANKING_MODE !== "analytics-informed") return;
+    const alert = makeAlert({ severity: "medium", confidence: 0.5 });
+    const ctx: RankingContext = { eventTypeUsefulnessScore: 1.0 };
+    const bd = computeRankingBreakdown(alert, ctx);
+    expect(bd.eventTypeBoost).toBe(8);
+    expect(bd.analyticsAdjustment).toBeGreaterThan(0);
+    expect(bd.analyticsAdjusted).toBe(true);
+  });
+
+  it("issuerBoost is nonzero when issuer investigate score is high (analytics-informed)", () => {
+    if (RANKING_MODE !== "analytics-informed") return;
+    const alert = makeAlert();
+    const ctx: RankingContext = { issuerInvestigateScore: 1.0 };
+    const bd = computeRankingBreakdown(alert, ctx);
+    expect(bd.issuerBoost).toBe(8);
+    expect(bd.analyticsAdjusted).toBe(true);
+  });
+
+  it("ruleNoisePenalty is nonzero when rule noise score is high (analytics-informed)", () => {
+    if (RANKING_MODE !== "analytics-informed") return;
+    const alert = makeAlert();
+    const ctx: RankingContext = { ruleNoiseScore: 1.0 };
+    const bd = computeRankingBreakdown(alert, ctx);
+    expect(bd.ruleNoisePenalty).toBe(8);
+    expect(bd.analyticsAdjustment).toBeLessThan(0);
+    expect(bd.analyticsAdjusted).toBe(true);
+  });
+
+  it("finalLabel matches getPriorityLabel(finalScore)", () => {
+    const alert = makeAlert({ severity: "high", confidence: 0.9, urgency: 9 });
+    const bd = computeRankingBreakdown(alert);
+    expect(bd.finalLabel).toBe(getPriorityLabel(bd.finalScore));
+  });
+
+  it("finalScore matches computePriorityScore output", () => {
+    const alert = makeAlert({ severity: "medium", confidence: 0.6, urgency: 5 });
+    const ctx: RankingContext = { eventTypeUsefulnessScore: 0.9 };
+    const bd = computeRankingBreakdown(alert, ctx);
+    expect(bd.finalScore).toBe(computePriorityScore(alert, ctx));
+  });
+
+  it("finalScore is clamped to [0, 100]", () => {
+    const maxAlert = makeAlert({ severity: "high", confidence: 1.0, portfolioLinked: true, urgency: 10 });
+    const ctx: RankingContext = { eventTypeUsefulnessScore: 1.0, issuerInvestigateScore: 1.0 };
+    const bd = computeRankingBreakdown(maxAlert, ctx);
+    expect(bd.finalScore).toBeLessThanOrEqual(100);
+
+    const zeroAlert = makeAlert({ severity: null, urgency: null, confidence: null, portfolioLinked: false });
+    const penaltyCtx: RankingContext = { ruleNoiseScore: 1.0 };
+    const bdZero = computeRankingBreakdown(zeroAlert, penaltyCtx);
+    expect(bdZero.finalScore).toBeGreaterThanOrEqual(0);
+  });
+});
+
+// ─── getAlertPriority breakdown field ────────────────────────────────────────
+
+describe("getAlertPriority breakdown field", () => {
+  it("includes a breakdown object", () => {
+    const alert = makeAlert({ severity: "high", confidence: 0.9 });
+    const result = getAlertPriority(alert);
+    expect(result.breakdown).toBeDefined();
+    expect(result.breakdown!.baseScore).toBeGreaterThan(0);
+    expect(result.breakdown!.finalScore).toBe(result.score);
+  });
+
+  it("breakdown.analyticsAdjusted matches top-level analyticsAdjusted", () => {
+    if (RANKING_MODE !== "analytics-informed") return;
+    const alert = makeAlert({ severity: "low" });
+    const ctx: RankingContext = { eventTypeUsefulnessScore: 1.0 };
+    const result = getAlertPriority(alert, ctx);
+    expect(result.analyticsAdjusted).toBe(result.breakdown!.analyticsAdjusted);
+  });
+
+  it("breakdown.finalLabel matches top-level label", () => {
+    const alert = makeAlert({ severity: "high", confidence: 1.0, portfolioLinked: true, urgency: 10 });
+    const result = getAlertPriority(alert);
+    expect(result.label).toBe(result.breakdown!.finalLabel);
   });
 });

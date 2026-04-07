@@ -6,6 +6,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AlertDetailPanel } from "./AlertDetailPanel";
 import type { AlertEvent } from "@workspace/api-client-react";
+import { RANKING_MODE } from "@/lib/alertPriority";
 
 // ─── mock API hooks used by AlertDetailPanel ──────────────────────────────────
 
@@ -618,5 +619,60 @@ describe("AlertDetailPanel — persisted workflow state", () => {
     );
     await userEvent.click(screen.getByTestId("action-btn-investigate"));
     expect(mockMutateAsync).toHaveBeenCalledWith({ id: 42 });
+  });
+});
+
+// ─── ranking breakdown section ────────────────────────────────────────────────
+
+describe("AlertDetailPanel — ranking breakdown", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders ranking breakdown section", () => {
+    render(<AlertDetailPanel {...defaultProps} alert={makeAlert()} />);
+    expect(screen.getByTestId("ranking-breakdown")).toBeInTheDocument();
+  });
+
+  it("renders base score in breakdown", () => {
+    render(<AlertDetailPanel {...defaultProps} alert={makeAlert()} />);
+    expect(screen.getByTestId("breakdown-base-score")).toBeInTheDocument();
+    // base score should be a number string
+    const text = screen.getByTestId("breakdown-base-score").textContent ?? "";
+    expect(Number(text)).toBeGreaterThanOrEqual(0);
+  });
+
+  it("renders final score in breakdown", () => {
+    render(<AlertDetailPanel {...defaultProps} alert={makeAlert()} />);
+    expect(screen.getByTestId("breakdown-final-score")).toBeInTheDocument();
+  });
+
+  it("final score in breakdown equals base score when no ranking context", () => {
+    const alert = makeAlert({ severity: "medium", confidence: 0.6, urgency: 5, portfolioLinked: false });
+    render(<AlertDetailPanel {...defaultProps} alert={alert} />);
+    const base = Number(screen.getByTestId("breakdown-base-score").textContent);
+    const final = Number(screen.getByTestId("breakdown-final-score").textContent);
+    // Without rankingContext, base and final should be the same
+    expect(final).toBe(base);
+  });
+
+  it("does not show adjustment badges when there are no adjustments", () => {
+    const alert = makeAlert({ severity: "medium", confidence: 0.6, urgency: 5 });
+    render(<AlertDetailPanel {...defaultProps} alert={alert} />);
+    expect(screen.queryByTestId("adjustment-badges")).not.toBeInTheDocument();
+  });
+
+  it("shows adjustment badges when rankingContext produces adjustments", () => {
+    if (RANKING_MODE !== "analytics-informed") return;
+
+    const alert = makeAlert({ severity: "low", confidence: 0.2, urgency: 2 });
+    render(
+      <AlertDetailPanel
+        {...defaultProps}
+        alert={alert}
+        rankingContext={{ eventTypeUsefulnessScore: 1.0 }}
+      />
+    );
+    expect(screen.getByTestId("adjustment-badges")).toBeInTheDocument();
   });
 });

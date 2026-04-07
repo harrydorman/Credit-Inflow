@@ -12,6 +12,45 @@ export interface AlertPriority {
   explanation: string;
   /** True when the score includes analytics-informed adjustments */
   analyticsAdjusted?: boolean;
+  /** Structured breakdown of how the score was computed */
+  breakdown?: RankingBreakdown;
+}
+
+/**
+ * Structured ranking breakdown for a single alert.
+ * Exposes all component scores so callers can inspect, display, and
+ * compare baseline vs analytics-informed ranking.
+ */
+export interface RankingBreakdown {
+  // ── base components ────────────────────────────────────────────────
+  /** Severity contribution (0/10/25/40) */
+  severityScore: number;
+  /** Confidence contribution (confidence × 30, 0–30) */
+  confidenceScore: number;
+  /** Portfolio exposure contribution (0 or 20) */
+  portfolioScore: number;
+  /** Urgency contribution ((urgency/10) × 10, 0–10) */
+  urgencyScore: number;
+  /** Sum of the four base components (before analytics, before clamping) */
+  baseScore: number;
+
+  // ── analytics adjustment components ───────────────────────────────
+  /** Points added because this event type is historically useful (0–8) */
+  eventTypeBoost: number;
+  /** Points added because this issuer often requires investigation (0–8) */
+  issuerBoost: number;
+  /** Points deducted because this rule has a high noise ratio (0–8, stored as positive) */
+  ruleNoisePenalty: number;
+  /** Net analytics delta after capping (analyticsAdjustment = eventTypeBoost + issuerBoost - ruleNoisePenalty, capped at ±MAX_TOTAL_ADJUSTMENT) */
+  analyticsAdjustment: number;
+
+  // ── final ──────────────────────────────────────────────────────────
+  /** baseScore + analyticsAdjustment, clamped to [0, 100] */
+  finalScore: number;
+  /** Priority label derived from finalScore */
+  finalLabel: PriorityLabel;
+  /** True when analyticsAdjustment !== 0 */
+  analyticsAdjusted: boolean;
 }
 
 /**
@@ -85,18 +124,23 @@ function deriveSeverity(alert: AlertEvent): "high" | "medium" | "low" | null {
 
 /**
  * Compute an analytics-informed adjustment for an alert given optional context.
- * Returns both the numeric delta (positive = boost, negative = penalty) and
- * human-readable reasons for any non-zero contribution.
+ * Returns the numeric delta, human-readable reasons, and individual component
+ * values so callers can build structured breakdowns.
  *
  * Individual contributions are linearly scaled from their threshold to their
  * maximum, then the total is hard-capped at ±MAX_TOTAL_ADJUSTMENT.
  */
-export function computeAnalyticsAdjustment(
-  ctx: RankingContext,
-): { delta: number; reasons: string[] } {
+export function computeAnalyticsAdjustment(ctx: RankingContext): {
+  delta: number;
+  reasons: string[];
+  eventTypeBoost: number;
+  issuerBoost: number;
+  ruleNoisePenalty: number;
+} {
   const reasons: string[] = [];
-  let boost = 0;
-  let penalty = 0;
+  let eventTypeBoost = 0;
+  let issuerBoost = 0;
+  let ruleNoisePenalty = 0;
 
   // Event-type usefulness boost
   const etScore = ctx.eventTypeUsefulnessScore ?? 0;
@@ -107,7 +151,7 @@ export function computeAnalyticsAdjustment(
         EVENT_TYPE_BOOST_MAX,
     );
     if (raw > 0) {
-      boost += raw;
+      eventTypeBoost = raw;
       reasons.push("boosted because this event type is historically useful");
     }
   }
@@ -121,7 +165,7 @@ export function computeAnalyticsAdjustment(
         ISSUER_INVESTIGATE_BOOST_MAX,
     );
     if (raw > 0) {
-      boost += raw;
+      issuerBoost = raw;
       reasons.push("boosted because this issuer often requires investigation");
     }
   }
@@ -134,14 +178,66 @@ export function computeAnalyticsAdjustment(
         RULE_NOISE_PENALTY_MAX,
     );
     if (raw > 0) {
-      penalty += raw;
+      ruleNoisePenalty = raw;
       reasons.push("reduced because this rule has a high noise ratio");
     }
   }
 
-  const uncapped = boost - penalty;
+  const uncapped = eventTypeBoost + issuerBoost - ruleNoisePenalty;
   const delta = Math.max(-MAX_TOTAL_ADJUSTMENT, Math.min(MAX_TOTAL_ADJUSTMENT, uncapped));
-  return { delta, reasons };
+  return { delta, reasons, eventTypeBoost, issuerBoost, ruleNoisePenalty };
+}
+
+// ─── computeRankingBreakdown ──────────────────────────────────────────────────
+
+/**
+ * Compute a fully structured ranking breakdown for an alert.
+ *
+ * This is the single source of truth for both the final score and all
+ * intermediate components. `getAlertPriority` delegates to this function.
+ */
+export function computeRankingBreakdown(
+  alert: AlertEvent,
+  ctx?: RankingContext,
+): RankingBreakdown {
+  const severity = deriveSeverity(alert);
+  const severityScore = severity ? (SEVERITY_SCORE[severity] ?? 0) : 0;
+  const confidenceScore = Math.round((alert.confidence ?? 0) * MAX_CONFIDENCE_SCORE * 100) / 100;
+  const portfolioScore = alert.portfolioLinked ? PORTFOLIO_BONUS : 0;
+  const urgencyScore = ((alert.urgency ?? 0) / 10) * MAX_URGENCY_SCORE;
+  const baseScore = Math.round(severityScore + confidenceScore + portfolioScore + urgencyScore);
+
+  let eventTypeBoost = 0;
+  let issuerBoost = 0;
+  let ruleNoisePenalty = 0;
+  let analyticsAdjustment = 0;
+
+  if (ctx && RANKING_MODE === "analytics-informed") {
+    const adj = computeAnalyticsAdjustment(ctx);
+    eventTypeBoost = adj.eventTypeBoost;
+    issuerBoost = adj.issuerBoost;
+    ruleNoisePenalty = adj.ruleNoisePenalty;
+    analyticsAdjustment = adj.delta;
+  }
+
+  const finalScore = Math.max(0, Math.min(100, baseScore + analyticsAdjustment));
+  const finalLabel = getPriorityLabel(finalScore);
+  const analyticsAdjusted = analyticsAdjustment !== 0;
+
+  return {
+    severityScore,
+    confidenceScore,
+    portfolioScore,
+    urgencyScore,
+    baseScore,
+    eventTypeBoost,
+    issuerBoost,
+    ruleNoisePenalty,
+    analyticsAdjustment,
+    finalScore,
+    finalLabel,
+    analyticsAdjusted,
+  };
 }
 
 // ─── computePriorityScore ─────────────────────────────────────────────────────
@@ -215,19 +311,13 @@ export function getPriorityExplanation(alert: AlertEvent, ctx?: RankingContext):
 // ─── getAlertPriority ─────────────────────────────────────────────────────────
 
 export function getAlertPriority(alert: AlertEvent, ctx?: RankingContext): AlertPriority {
-  const score = computePriorityScore(alert, ctx);
-  // Detect whether the analytics layer produced a nonzero adjustment by comparing
-  // to the base score (avoids calling computeAnalyticsAdjustment a second time).
-  const baseScore =
-    ctx && RANKING_MODE === "analytics-informed"
-      ? computePriorityScore(alert)
-      : score;
-  const analyticsAdjusted = score !== baseScore;
+  const breakdown = computeRankingBreakdown(alert, ctx);
   return {
-    score,
-    label: getPriorityLabel(score),
+    score: breakdown.finalScore,
+    label: breakdown.finalLabel,
     explanation: getPriorityExplanation(alert, ctx),
-    analyticsAdjusted,
+    analyticsAdjusted: breakdown.analyticsAdjusted,
+    breakdown,
   };
 }
 
