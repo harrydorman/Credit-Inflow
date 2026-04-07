@@ -2,6 +2,8 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { setOrgIdGetter } from "@workspace/api-client-react";
+import { getOrgId } from "@/lib/org-context";
 import NotFound from "@/pages/not-found";
 
 import MarketOverview from "@/pages/market-overview";
@@ -14,6 +16,12 @@ import IssuerDetail from "@/pages/issuer-detail";
 import Sectors from "@/pages/sectors";
 import Watchlists from "@/pages/watchlists";
 import Alerts from "@/pages/alerts";
+import Portfolios from "@/pages/portfolios";
+import PortfolioDetail from "@/pages/portfolio-detail";
+
+// Wire up organization ID for all API calls (dev/demo mode).
+// Replace getOrgId() with your auth provider in production.
+setOrgIdGetter(getOrgId);
 
 const queryClient = new QueryClient();
 
@@ -30,6 +38,8 @@ function Router() {
       <Route path="/issuer/:name" component={IssuerDetail} />
       <Route path="/watchlists" component={Watchlists} />
       <Route path="/alerts" component={Alerts} />
+      <Route path="/portfolios" component={Portfolios} />
+      <Route path="/portfolios/:id" component={PortfolioDetail} />
       <Route component={NotFound} />
     </Switch>
   );
