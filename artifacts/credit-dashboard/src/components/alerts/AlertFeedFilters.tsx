@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ListAlertEventsSeverity } from "@workspace/api-client-react";
+import type { PriorityLabel } from "@/lib/alertPriority";
 import { X } from "lucide-react";
 
 export interface AlertFilters {
@@ -18,6 +19,10 @@ export interface AlertFilters {
   portfolioLinked: boolean | null;
   dateFrom: string;
   dateTo: string;
+  /** Client-side: filter by computed priority label */
+  priority: PriorityLabel | "";
+  /** Client-side: show only unread alerts with High or Critical priority */
+  unreadHighPriority: boolean;
 }
 
 export const DEFAULT_FILTERS: AlertFilters = {
@@ -28,6 +33,8 @@ export const DEFAULT_FILTERS: AlertFilters = {
   portfolioLinked: null,
   dateFrom: "",
   dateTo: "",
+  priority: "",
+  unreadHighPriority: false,
 };
 
 interface AlertFeedFiltersProps {
@@ -53,7 +60,9 @@ export function AlertFeedFilters({
     filters.eventType !== "" ||
     filters.portfolioLinked !== null ||
     filters.dateFrom !== "" ||
-    filters.dateTo !== "";
+    filters.dateTo !== "" ||
+    filters.priority !== "" ||
+    filters.unreadHighPriority;
 
   return (
     <div className="space-y-2" data-testid="alert-feed-filters">
@@ -113,6 +122,39 @@ export function AlertFeedFilters({
           data-testid="filter-portfolio"
         >
           Portfolio only
+        </Button>
+
+        {/* Priority */}
+        <Select
+          value={filters.priority || "all"}
+          onValueChange={(v) =>
+            set("priority", v === "all" ? "" : (v as AlertFilters["priority"]))
+          }
+        >
+          <SelectTrigger
+            className="h-7 text-xs font-mono w-32"
+            data-testid="filter-priority"
+          >
+            <SelectValue placeholder="Priority" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All priority</SelectItem>
+            <SelectItem value="Critical">Critical</SelectItem>
+            <SelectItem value="High">High</SelectItem>
+            <SelectItem value="Medium">Medium</SelectItem>
+            <SelectItem value="Low">Low</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Unread + high priority */}
+        <Button
+          size="sm"
+          variant={filters.unreadHighPriority ? "default" : "outline"}
+          className="h-7 text-xs font-mono"
+          onClick={() => set("unreadHighPriority", !filters.unreadHighPriority)}
+          data-testid="filter-unread-high-priority"
+        >
+          Unread + High
         </Button>
 
         {/* Issuer */}

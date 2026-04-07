@@ -21,7 +21,17 @@ import {
   ChevronRight,
   Info,
   MailOpen,
+  TrendingUp,
+  Eye,
+  EyeOff,
+  Flame,
 } from "lucide-react";
+import {
+  getAlertPriority,
+  PRIORITY_BADGE_STYLES,
+  ANALYST_ACTION_STYLES,
+  type AnalystAction,
+} from "@/lib/alertPriority";
 
 interface AlertDetailPanelProps {
   alert: AlertEvent | null;
@@ -30,6 +40,8 @@ interface AlertDetailPanelProps {
   onMarkRead: (id: number) => void;
   onMarkUnread?: (id: number) => void;
   markReadPending: boolean;
+  action?: AnalystAction;
+  onActionChange?: (id: number, action: AnalystAction) => void;
 }
 
 function fmtDateTime(iso: string) {
@@ -105,6 +117,8 @@ export function AlertDetailPanel({
   onMarkRead,
   onMarkUnread,
   markReadPending,
+  action,
+  onActionChange,
 }: AlertDetailPanelProps) {
   const [debugExpanded, setDebugExpanded] = useState(false);
 
@@ -114,6 +128,7 @@ export function AlertDetailPanel({
   const derivedSeverity =
     alert.severity ?? urgencyToSeverity(alert.urgency ?? null);
   const triggerReason = buildTriggerReason(alert);
+  const priority = getAlertPriority(alert);
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -126,12 +141,26 @@ export function AlertDetailPanel({
         <SheetHeader className="px-6 pt-6 pb-4 border-b border-border">
           <div className="flex items-center gap-2 mb-1">
             <SeverityBadge urgency={alert.urgency} />
+            <Badge
+              className={`text-[10px] h-4 px-1.5 font-mono border ${PRIORITY_BADGE_STYLES[priority.label]}`}
+              data-testid="priority-label-badge"
+            >
+              {priority.label.toUpperCase()}
+            </Badge>
             {!alert.isRead && (
               <Badge
                 variant="default"
                 className="text-[10px] h-4 px-1.5 font-mono"
               >
                 UNREAD
+              </Badge>
+            )}
+            {action && (
+              <Badge
+                className={`text-[10px] h-4 px-1.5 font-mono border ${ANALYST_ACTION_STYLES[action]}`}
+                data-testid="action-state-badge"
+              >
+                {action.toUpperCase()}
               </Badge>
             )}
             {isPortfolioLinked && (
@@ -245,6 +274,78 @@ export function AlertDetailPanel({
               {triggerReason}
             </p>
           </div>
+
+          {/* Priority explanation */}
+          <div
+            className="rounded-md bg-secondary/20 border border-border px-3 py-2.5"
+            data-testid="priority-section"
+          >
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <Flame className="h-3.5 w-3.5 text-primary" />
+              <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide font-bold">
+                Priority · Score {priority.score}/100
+              </p>
+            </div>
+            <p className="text-xs text-foreground" data-testid="priority-explanation">
+              {priority.explanation}
+            </p>
+          </div>
+
+          {/* Analyst actions */}
+          {onActionChange && (
+            <div data-testid="analyst-actions-section">
+              <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide mb-2">
+                Analyst action
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  variant={action === "investigate" ? "default" : "outline"}
+                  className="h-7 text-xs font-mono"
+                  onClick={() =>
+                    onActionChange(
+                      alert.id,
+                      action === "investigate" ? null : "investigate",
+                    )
+                  }
+                  data-testid="action-btn-investigate"
+                >
+                  <TrendingUp className="h-3 w-3 mr-1" />
+                  Investigate
+                </Button>
+                <Button
+                  size="sm"
+                  variant={action === "monitor" ? "default" : "outline"}
+                  className="h-7 text-xs font-mono"
+                  onClick={() =>
+                    onActionChange(
+                      alert.id,
+                      action === "monitor" ? null : "monitor",
+                    )
+                  }
+                  data-testid="action-btn-monitor"
+                >
+                  <Eye className="h-3 w-3 mr-1" />
+                  Monitor
+                </Button>
+                <Button
+                  size="sm"
+                  variant={action === "ignore" ? "secondary" : "outline"}
+                  className="h-7 text-xs font-mono"
+                  onClick={() =>
+                    onActionChange(
+                      alert.id,
+                      action === "ignore" ? null : "ignore",
+                    )
+                  }
+                  data-testid="action-btn-ignore"
+                >
+                  <EyeOff className="h-3 w-3 mr-1" />
+                  Ignore
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Confidence breakdown */}
           {alert.confidence != null && (

@@ -164,7 +164,8 @@ describe("AlertDetailPanel", () => {
   it("renders portfolio impact section when portfolioLinked is true", () => {
     render(<AlertDetailPanel {...defaultProps} alert={makeAlert({ portfolioLinked: true })} />);
     expect(screen.getByTestId("portfolio-impact-section")).toBeInTheDocument();
-    expect(screen.getByText(/Portfolio exposure/i)).toBeInTheDocument();
+    // "Portfolio exposure" appears in both priority explanation and section heading
+    expect(screen.getAllByText(/Portfolio exposure/i).length).toBeGreaterThan(0);
   });
 
   it("does not render portfolio impact section when portfolioLinked is false", () => {
@@ -316,5 +317,133 @@ describe("AlertDetailPanel", () => {
   it("renders panel with data-testid when alert present", () => {
     render(<AlertDetailPanel {...defaultProps} alert={makeAlert()} />);
     expect(screen.getByTestId("alert-detail-panel")).toBeInTheDocument();
+  });
+
+  // ─── priority section ─────────────────────────────────────────────────────
+
+  it("renders priority section", () => {
+    render(<AlertDetailPanel {...defaultProps} alert={makeAlert()} />);
+    expect(screen.getByTestId("priority-section")).toBeInTheDocument();
+  });
+
+  it("renders priority label badge in header", () => {
+    render(<AlertDetailPanel {...defaultProps} alert={makeAlert()} />);
+    expect(screen.getByTestId("priority-label-badge")).toBeInTheDocument();
+  });
+
+  it("renders priority explanation text", () => {
+    render(<AlertDetailPanel {...defaultProps} alert={makeAlert()} />);
+    expect(screen.getByTestId("priority-explanation")).toBeInTheDocument();
+    expect(screen.getByTestId("priority-explanation").textContent).toContain("priority because:");
+  });
+
+  it("shows Critical label for max-signal alert", () => {
+    const alert = makeAlert({
+      severity: "high",
+      confidence: 1.0,
+      portfolioLinked: true,
+      urgency: 10,
+    });
+    render(<AlertDetailPanel {...defaultProps} alert={alert} />);
+    expect(screen.getByTestId("priority-label-badge").textContent).toContain("CRITICAL");
+  });
+
+  // ─── analyst action buttons ───────────────────────────────────────────────
+
+  it("renders analyst action section when onActionChange is provided", () => {
+    render(
+      <AlertDetailPanel
+        {...defaultProps}
+        alert={makeAlert()}
+        onActionChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("analyst-actions-section")).toBeInTheDocument();
+  });
+
+  it("does not render analyst action section when onActionChange is not provided", () => {
+    render(<AlertDetailPanel {...defaultProps} alert={makeAlert()} />);
+    expect(screen.queryByTestId("analyst-actions-section")).not.toBeInTheDocument();
+  });
+
+  it("calls onActionChange with 'investigate' when Investigate button clicked", async () => {
+    const onActionChange = vi.fn();
+    render(
+      <AlertDetailPanel
+        {...defaultProps}
+        alert={makeAlert()}
+        action={null}
+        onActionChange={onActionChange}
+      />,
+    );
+    await userEvent.click(screen.getByTestId("action-btn-investigate"));
+    expect(onActionChange).toHaveBeenCalledWith(42, "investigate");
+  });
+
+  it("calls onActionChange with 'monitor' when Monitor button clicked", async () => {
+    const onActionChange = vi.fn();
+    render(
+      <AlertDetailPanel
+        {...defaultProps}
+        alert={makeAlert()}
+        action={null}
+        onActionChange={onActionChange}
+      />,
+    );
+    await userEvent.click(screen.getByTestId("action-btn-monitor"));
+    expect(onActionChange).toHaveBeenCalledWith(42, "monitor");
+  });
+
+  it("calls onActionChange with 'ignore' when Ignore button clicked", async () => {
+    const onActionChange = vi.fn();
+    render(
+      <AlertDetailPanel
+        {...defaultProps}
+        alert={makeAlert()}
+        action={null}
+        onActionChange={onActionChange}
+      />,
+    );
+    await userEvent.click(screen.getByTestId("action-btn-ignore"));
+    expect(onActionChange).toHaveBeenCalledWith(42, "ignore");
+  });
+
+  it("calls onActionChange with null when active action button is clicked again (toggle off)", async () => {
+    const onActionChange = vi.fn();
+    render(
+      <AlertDetailPanel
+        {...defaultProps}
+        alert={makeAlert()}
+        action="investigate"
+        onActionChange={onActionChange}
+      />,
+    );
+    await userEvent.click(screen.getByTestId("action-btn-investigate"));
+    expect(onActionChange).toHaveBeenCalledWith(42, null);
+  });
+
+  it("shows action state badge in header when action is set", () => {
+    render(
+      <AlertDetailPanel
+        {...defaultProps}
+        alert={makeAlert()}
+        action="monitor"
+        onActionChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("action-state-badge")).toBeInTheDocument();
+    expect(screen.getByTestId("action-state-badge").textContent?.toLowerCase()).toContain("monitor");
+  });
+
+  it("does not show action state badge when action is null", () => {
+    render(
+      <AlertDetailPanel
+        {...defaultProps}
+        alert={makeAlert()}
+        action={null}
+        onActionChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("action-state-badge")).not.toBeInTheDocument();
   });
 });

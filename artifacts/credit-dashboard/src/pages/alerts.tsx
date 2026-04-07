@@ -22,6 +22,12 @@ import {
   DEFAULT_FILTERS,
   type AlertFilters,
 } from "@/components/alerts";
+import {
+  sortAlertsByPriority,
+  getPriorityLabel,
+  computePriorityScore,
+  type AnalystAction,
+} from "@/lib/alertPriority";
 
 // ─── AlertFeed ───────────────────────────────────────────────────────────────
 
@@ -39,15 +45,18 @@ function AlertFeed() {
   const [detailAlert, setDetailAlert] = useState<AlertEvent | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
+  // ── analyst actions (local frontend state) ────────────────────────────────
+  const [actions, setActions] = useState<Record<number, AnalystAction>>({});
+
   // ── API hooks ─────────────────────────────────────────────────────────────
   const markRead = useMarkAlertRead();
   const markUnread = useMarkAlertUnread();
   const bulkMarkRead = useBulkMarkAlertsRead();
 
-  // Build params from filters
+  // Build params from filters (server-side filters only)
   const params: ListAlertEventsParams = {
     limit: 100,
-    ...(filters.isRead === "unread" ? { isRead: false } : {}),
+    ...(filters.isRead === "unread" && !filters.unreadHighPriority ? { isRead: false } : {}),
     ...(filters.isRead === "read" ? { isRead: true } : {}),
     ...(filters.severity !== "" ? { severity: filters.severity } : {}),
     ...(filters.issuerName.trim() !== ""
@@ -151,9 +160,32 @@ function AlertFeed() {
     setSelectedIds(new Set());
   }, []);
 
+  const handleActionChange = useCallback(
+    (id: number, action: AnalystAction) => {
+      setActions((prev) => ({ ...prev, [id]: action }));
+    },
+    [],
+  );
+
   // ── render ────────────────────────────────────────────────────────────────
 
-  const alerts = data?.alerts ?? [];
+  const rawAlerts = data?.alerts ?? [];
+
+  // Sort by priority (highest first) then apply client-side filters
+  const sortedAlerts = sortAlertsByPriority(rawAlerts);
+
+  const alerts = sortedAlerts.filter((a: AlertEvent) => {
+    if (filters.unreadHighPriority) {
+      const label = getPriorityLabel(computePriorityScore(a));
+      if (a.isRead || (label !== "Critical" && label !== "High")) return false;
+    }
+    if (filters.priority !== "") {
+      const label = getPriorityLabel(computePriorityScore(a));
+      if (label !== filters.priority) return false;
+    }
+    return true;
+  });
+
   const unreadAlerts = alerts.filter((a: AlertEvent) => !a.isRead);
   const allUnreadSelected =
     unreadAlerts.length > 0 && selectedIds.size === unreadAlerts.length;
@@ -246,12 +278,13 @@ function AlertFeed() {
         >
           <ShieldAlert className="h-10 w-10 opacity-15" />
           <p className="font-mono text-sm text-muted-foreground">
-            {filters.isRead === "unread"
+            {filters.isRead === "unread" || filters.unreadHighPriority
               ? "No unread alerts."
               : filters.severity !== "" ||
                   filters.issuerName !== "" ||
                   filters.eventType !== "" ||
-                  filters.portfolioLinked !== null
+                  filters.portfolioLinked !== null ||
+                  filters.priority !== ""
                 ? "No alerts match the active filters."
                 : "No alerts yet."}
           </p>
@@ -275,6 +308,7 @@ function AlertFeed() {
               onMarkRead={handleMarkRead}
               onClick={handleRowClick}
               markReadPending={markRead.isPending}
+              action={actions[alert.id] ?? null}
             />
           ))}
         </div>
@@ -288,6 +322,8 @@ function AlertFeed() {
         onMarkRead={handleMarkRead}
         onMarkUnread={handleMarkUnread}
         markReadPending={markRead.isPending || markUnread.isPending}
+        action={detailAlert ? (actions[detailAlert.id] ?? null) : null}
+        onActionChange={handleActionChange}
       />
     </div>
   );

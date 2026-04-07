@@ -4,6 +4,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { AlertEvent } from "@workspace/api-client-react";
 import { CheckCheck, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  getAlertPriority,
+  PRIORITY_BADGE_STYLES,
+  ANALYST_ACTION_LABELS,
+  ANALYST_ACTION_STYLES,
+  type AnalystAction,
+} from "@/lib/alertPriority";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -54,6 +61,40 @@ export function SeverityBadge({
   );
 }
 
+// ─── PriorityBadge ───────────────────────────────────────────────────────────
+
+export function PriorityBadge({ alert }: { alert: AlertEvent }) {
+  const { label } = getAlertPriority(alert);
+  return (
+    <Badge
+      className={cn(
+        "text-[9px] font-mono font-bold px-1 py-0 h-4 border uppercase",
+        PRIORITY_BADGE_STYLES[label],
+      )}
+      data-testid="priority-badge"
+    >
+      {label}
+    </Badge>
+  );
+}
+
+// ─── ActionBadge ─────────────────────────────────────────────────────────────
+
+export function ActionBadge({ action }: { action: AnalystAction }) {
+  if (!action) return null;
+  return (
+    <Badge
+      className={cn(
+        "text-[9px] font-mono font-bold px-1 py-0 h-4 border uppercase",
+        ANALYST_ACTION_STYLES[action],
+      )}
+      data-testid="action-badge"
+    >
+      {ANALYST_ACTION_LABELS[action]}
+    </Badge>
+  );
+}
+
 // ─── AlertFeedRow ────────────────────────────────────────────────────────────
 
 interface AlertFeedRowProps {
@@ -63,6 +104,7 @@ interface AlertFeedRowProps {
   onMarkRead: (id: number) => void;
   onClick: (alert: AlertEvent) => void;
   markReadPending: boolean;
+  action?: AnalystAction;
 }
 
 export function AlertFeedRow({
@@ -72,6 +114,7 @@ export function AlertFeedRow({
   onMarkRead,
   onClick,
   markReadPending,
+  action,
 }: AlertFeedRowProps) {
   const isPortfolioLinked = Boolean(
     (alert as AlertEvent & { portfolioLinked?: boolean }).portfolioLinked,
@@ -85,6 +128,9 @@ export function AlertFeedRow({
       minute: "2-digit",
     });
 
+  const { label: priorityLabel } = getAlertPriority(alert);
+  const isCritical = priorityLabel === "Critical";
+
   return (
     <div
       role="row"
@@ -93,7 +139,9 @@ export function AlertFeedRow({
         "group flex items-start gap-3 px-4 py-3 border-b border-border cursor-pointer transition-colors",
         alert.isRead
           ? "bg-card hover:bg-secondary/20 text-muted-foreground"
-          : "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary",
+          : isCritical
+            ? "bg-red-950/20 hover:bg-red-950/30 border-l-2 border-l-red-600"
+            : "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary",
       )}
       onClick={() => onClick(alert)}
     >
@@ -155,6 +203,9 @@ export function AlertFeedRow({
               Portfolio
             </span>
           )}
+
+          <PriorityBadge alert={alert} />
+          <ActionBadge action={action ?? null} />
         </div>
       </div>
 
