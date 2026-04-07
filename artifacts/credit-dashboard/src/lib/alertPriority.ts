@@ -199,14 +199,7 @@ export function getPriorityExplanation(alert: AlertEvent, ctx?: RankingContext):
   if (conf >= 0.8) parts.push("high confidence");
   else if (conf >= 0.5) parts.push("moderate confidence");
 
-  if (parts.length === 0 && (!ctx || RANKING_MODE === "baseline")) {
-    return "Insufficient signal data to determine priority.";
-  }
-
-  const score = computePriorityScore(alert, ctx);
-  const label = getPriorityLabel(score);
-
-  // Analytics adjustment reasons
+  // Analytics adjustment reasons (analytics-informed mode only)
   if (ctx && RANKING_MODE === "analytics-informed") {
     const { reasons } = computeAnalyticsAdjustment(ctx);
     parts.push(...reasons);
@@ -214,6 +207,8 @@ export function getPriorityExplanation(alert: AlertEvent, ctx?: RankingContext):
 
   if (parts.length === 0) return "Insufficient signal data to determine priority.";
 
+  const score = computePriorityScore(alert, ctx);
+  const label = getPriorityLabel(score);
   return `${label} priority because: ${parts.join(" + ")}.`;
 }
 
@@ -221,10 +216,13 @@ export function getPriorityExplanation(alert: AlertEvent, ctx?: RankingContext):
 
 export function getAlertPriority(alert: AlertEvent, ctx?: RankingContext): AlertPriority {
   const score = computePriorityScore(alert, ctx);
-  const analyticsAdjusted =
-    Boolean(ctx) &&
-    RANKING_MODE === "analytics-informed" &&
-    computeAnalyticsAdjustment(ctx!).delta !== 0;
+  // Detect whether the analytics layer produced a nonzero adjustment by comparing
+  // to the base score (avoids calling computeAnalyticsAdjustment a second time).
+  const baseScore =
+    ctx && RANKING_MODE === "analytics-informed"
+      ? computePriorityScore(alert)
+      : score;
+  const analyticsAdjusted = score !== baseScore;
   return {
     score,
     label: getPriorityLabel(score),
