@@ -904,6 +904,8 @@ export interface RankingSnapshotMetrics {
   investigateRateAmongPortfolioLinkedBoosted: number;
   topBoostedEventTypes: { eventType: string; totalBoost: number }[];
   topPenalisedRules: { ruleName: string; totalPenalty: number }[];
+  /** Indicates whether metrics were computed server-side or estimated in the browser. */
+  metricSource?: "estimated" | "server-computed";
 }
 
 export interface RankingEvalSnapshot {
@@ -920,7 +922,8 @@ export interface CreateRankingEvalSnapshotRequest {
   rankingModelVersion: string;
   timeWindow: RankingSnapshotTimeWindow;
   snapshotType?: RankingSnapshotType;
-  metrics: RankingSnapshotMetrics;
+  /** When omitted, the server computes metrics from persisted data. */
+  metrics?: RankingSnapshotMetrics;
 }
 
 export interface RankingEvalSnapshotList {

@@ -329,3 +329,145 @@ describe("RankingEvalPage – recommendations panel", () => {
     // If no panel, that's also fine (no recs generated from mock data)
   });
 });
+
+// ─── Phase 13: attribution, metric source, save mode, comparison reasoning ────
+
+describe("RankingEvalPage – metric source badge", () => {
+  it("renders the metric source badge", () => {
+    render(<RankingEvalPage />);
+    const badge = screen.getByTestId("metric-source-badge");
+    expect(badge).toBeTruthy();
+    // Should display "estimated" by default (frontend-computed)
+    expect(badge.textContent).toMatch(/estimated|server-computed/i);
+  });
+});
+
+describe("RankingEvalPage – save mode toggle", () => {
+  it("renders the save mode toggle", () => {
+    render(<RankingEvalPage />);
+    expect(screen.getByTestId("save-mode-toggle")).toBeTruthy();
+  });
+
+  it("shows 'Current view' and 'Server-compute' options", () => {
+    render(<RankingEvalPage />);
+    expect(screen.getByTestId("save-mode-estimated")).toBeTruthy();
+    expect(screen.getByTestId("save-mode-server")).toBeTruthy();
+  });
+
+  it("defaults to 'estimated' mode", () => {
+    render(<RankingEvalPage />);
+    const estimatedBtn = screen.getByTestId("save-mode-estimated");
+    expect(estimatedBtn.className).toContain("bg-primary");
+  });
+
+  it("switches to server-compute mode when clicked", () => {
+    render(<RankingEvalPage />);
+    const serverBtn = screen.getByTestId("save-mode-server");
+    fireEvent.click(serverBtn);
+    expect(serverBtn.className).toContain("bg-primary");
+  });
+});
+
+describe("RankingEvalPage – outcome attribution panel", () => {
+  it("renders the outcome attribution panel", () => {
+    render(<RankingEvalPage />);
+    expect(screen.getByTestId("outcome-attribution-panel")).toBeTruthy();
+  });
+
+  it("renders 'Boosted alerts' metric card", () => {
+    render(<RankingEvalPage />);
+    const panel = screen.getByTestId("outcome-attribution-panel");
+    expect(panel.textContent).toMatch(/boosted alerts/i);
+  });
+
+  it("renders 'Penalised alerts' metric card", () => {
+    render(<RankingEvalPage />);
+    const panel = screen.getByTestId("outcome-attribution-panel");
+    expect(panel.textContent).toMatch(/penalised alerts/i);
+  });
+
+  it("expands attribution detail when expand button is clicked", () => {
+    render(<RankingEvalPage />);
+    const expandBtn = screen.getByTestId("attribution-expand-button");
+    fireEvent.click(expandBtn);
+    expect(screen.getByTestId("attribution-detail")).toBeTruthy();
+  });
+});
+
+describe("RankingEvalPage – snapshot comparison reasoning", () => {
+  it("renders comparison explanations when a snapshot is present", async () => {
+    const { useListRankingEvalSnapshots } = await import("@workspace/api-client-react");
+    (useListRankingEvalSnapshots as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {
+        snapshots: [
+          {
+            id: 1,
+            organizationId: "org-1",
+            rankingModelVersion: "v1.0.0",
+            timeWindow: "all",
+            snapshotType: "manual",
+            metricsJson: {
+              totalAlerts: 50,
+              adjustedFraction: 0.2,
+              averagePositiveAdjustment: 3,
+              averageNegativeAdjustment: -2,
+              usefulFeedbackRateAmongBoosted: 0.5,
+              noiseRateAmongPenalised: 0.4,
+              investigateRateAmongPortfolioLinkedBoosted: 0.3,
+              topBoostedEventTypes: [],
+              topPenalisedRules: [],
+            },
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      },
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+
+    render(<RankingEvalPage />);
+    // The comparison panel should render when snapshot is present
+    expect(screen.getByTestId("snapshot-comparison-panel")).toBeTruthy();
+    // Explanations should be rendered
+    expect(screen.getByTestId("comparison-explanations")).toBeTruthy();
+  });
+});
+
+describe("RankingEvalPage – server-computed metric source on snapshot rows", () => {
+  it("shows [server] tag on snapshot rows with server-computed metrics", async () => {
+    const { useListRankingEvalSnapshots } = await import("@workspace/api-client-react");
+    (useListRankingEvalSnapshots as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {
+        snapshots: [
+          {
+            id: 77,
+            organizationId: "org-1",
+            rankingModelVersion: "v1.1.0",
+            timeWindow: "all",
+            snapshotType: "manual",
+            metricsJson: {
+              totalAlerts: 100,
+              adjustedFraction: 0.25,
+              averagePositiveAdjustment: 3,
+              averageNegativeAdjustment: -2,
+              usefulFeedbackRateAmongBoosted: 0,
+              noiseRateAmongPenalised: 0,
+              investigateRateAmongPortfolioLinkedBoosted: 0,
+              topBoostedEventTypes: [],
+              topPenalisedRules: [],
+              metricSource: "server-computed",
+            },
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      },
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+
+    render(<RankingEvalPage />);
+    const row = screen.getByTestId("snapshot-row-77");
+    expect(row.textContent).toContain("[server]");
+  });
+});
+

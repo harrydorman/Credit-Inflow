@@ -16,6 +16,10 @@ import type {
   SnapshotType,
 } from "@workspace/db";
 import { and, eq, desc } from "drizzle-orm";
+import {
+  computeSnapshotMetrics,
+  type CalibrationConfig,
+} from "./snapshotMetricsService";
 
 // ---------------------------------------------------------------------------
 // Create snapshot
@@ -27,6 +31,14 @@ export interface CreateSnapshotInput {
   timeWindow: SnapshotTimeWindow;
   snapshotType?: SnapshotType;
   metrics: RankingSnapshotMetrics;
+}
+
+export interface ComputeAndCreateSnapshotInput {
+  orgId: string;
+  rankingModelVersion: string;
+  timeWindow: SnapshotTimeWindow;
+  snapshotType?: SnapshotType;
+  calibrationConfig?: CalibrationConfig;
 }
 
 /**
@@ -50,6 +62,30 @@ export async function createRankingEvalSnapshot(
     .returning();
 
   return inserted;
+}
+
+/**
+ * Server-compute metrics from DB data, then persist as a snapshot.
+ *
+ * Used when the caller omits metrics from the POST body — the server
+ * derives them from persisted alert events, feedback, and workflow state.
+ */
+export async function computeAndCreateSnapshot(
+  input: ComputeAndCreateSnapshotInput,
+): Promise<RankingEvalSnapshot> {
+  const metrics = await computeSnapshotMetrics(
+    input.orgId,
+    input.timeWindow,
+    input.calibrationConfig,
+  );
+
+  return createRankingEvalSnapshot({
+    orgId: input.orgId,
+    rankingModelVersion: input.rankingModelVersion,
+    timeWindow: input.timeWindow,
+    snapshotType: input.snapshotType ?? "manual",
+    metrics,
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -2,12 +2,18 @@
  * lib/snapshotComparison.ts
  *
  * Phase 12: Ranking Calibration Recommendations + Historical Evaluation Snapshots.
+ * Phase 13: Feedback-Aware Snapshot Metrics + Outcome Attribution.
  *
  * Pure utilities for comparing two ranking evaluation snapshots.
  *
  * Use cases:
  * - Same time window, different model versions (did the new model improve things?)
  * - Side-by-side display on the /ranking-eval calibration page
+ *
+ * Phase 13 enhancements:
+ * - Threshold-based judgment: tiny changes (< MEANINGFUL_SIGNAL_DELTA) stay "unchanged"
+ * - Explicit vote counts: at least 2-of-3 signal metrics must improve for "improved"
+ * - `explanations` array: human-readable reasons for the overall assessment label
  */
 
 import type { RankingSnapshotMetrics } from "./snapshotTypes";
@@ -51,12 +57,28 @@ export interface SnapshotComparison {
   };
   /** Overall assessment based on the three signal metrics */
   overallAssessment: "improved" | "mixed" | "worsened" | "unchanged";
+  /**
+   * Human-readable sentences explaining why this assessment was assigned.
+   * Always contains at least one entry.
+   */
+  explanations: string[];
 }
 
 // ─── config ───────────────────────────────────────────────────────────────────
 
 /** Minimum absolute delta to be considered a meaningful change (not "unchanged"). */
 const MEANINGFUL_DELTA = 0.01;
+
+/**
+ * Minimum absolute delta for a signal metric to "vote" as improved/worsened.
+ * Changes smaller than this threshold are treated as noise and count as unchanged
+ * even when technically non-zero.  This is larger than MEANINGFUL_DELTA to ensure
+ * small rounding fluctuations don't shift the overall assessment.
+ */
+const MEANINGFUL_SIGNAL_DELTA = 0.02;
+
+/** Minimum number of signal metrics that must agree for a definitive "improved" / "worsened" verdict. */
+const SIGNAL_MAJORITY = 2;
 
 /**
  * Metrics where higher = better (positive delta = improvement).
@@ -93,6 +115,17 @@ function directionFor(key: keyof RankingSnapshotMetrics, delta: number): MetricD
   return "unchanged"; // no directional opinion for non-signal metrics
 }
 
+/**
+ * Direction for signal-metric voting.
+ *
+ * Uses a higher threshold (MEANINGFUL_SIGNAL_DELTA) than directionFor so that
+ * tiny fluctuations don't shift the majority vote.
+ */
+function signalDirectionFor(delta: number): MetricDirection {
+  if (Math.abs(delta) < MEANINGFUL_SIGNAL_DELTA) return "unchanged";
+  return delta > 0 ? "improved" : "worsened";
+}
+
 function makeDelta(
   key: keyof RankingSnapshotMetrics,
   baseline: number,
@@ -107,6 +140,84 @@ function makeDelta(
     delta,
     direction: directionFor(key, delta),
   };
+}
+
+// ─── explanation builder ──────────────────────────────────────────────────────
+
+function buildExplanations(
+  signalDeltas: SnapshotComparison["signalDeltas"],
+  overallAssessment: SnapshotComparison["overallAssessment"],
+): string[] {
+  const explanations: string[] = [];
+
+  const { usefulFeedbackRateAmongBoosted, noiseRateAmongPenalised, investigateRateAmongPortfolioLinkedBoosted } =
+    signalDeltas;
+
+  const signalVotes = [
+    usefulFeedbackRateAmongBoosted,
+    noiseRateAmongPenalised,
+    investigateRateAmongPortfolioLinkedBoosted,
+  ].map((d) => signalDirectionFor(d.delta));
+
+  const improvedCount = signalVotes.filter((v) => v === "improved").length;
+  const worsenedCount = signalVotes.filter((v) => v === "worsened").length;
+  const unchangedCount = signalVotes.filter((v) => v === "unchanged").length;
+
+  if (overallAssessment === "unchanged") {
+    if (unchangedCount === 3) {
+      explanations.push("All three signal metrics changed by less than 2 pp — assessment unchanged, no meaningful shift detected.");
+    } else {
+      explanations.push("Signal metrics did not show a clear majority direction — assessment unchanged.");
+    }
+  } else if (overallAssessment === "improved") {
+    explanations.push(
+      `${improvedCount} of 3 signal metrics improved by at least 2 pp, meeting the threshold for a confident "improved" verdict.`,
+    );
+  } else if (overallAssessment === "worsened") {
+    explanations.push(
+      `${worsenedCount} of 3 signal metrics worsened by at least 2 pp, meeting the threshold for a confident "worsened" verdict.`,
+    );
+  } else {
+    // mixed
+    if (improvedCount > 0 && worsenedCount > 0) {
+      explanations.push(
+        `${improvedCount} signal metric${improvedCount > 1 ? "s" : ""} improved and ${worsenedCount} worsened — changes are mixed.`,
+      );
+    } else {
+      explanations.push("Signal metrics show mixed or inconclusive movement.");
+    }
+  }
+
+  // Metric-specific notes
+  const ufr = usefulFeedbackRateAmongBoosted;
+  if (Math.abs(ufr.delta) >= MEANINGFUL_SIGNAL_DELTA) {
+    const dir = ufr.delta > 0 ? "↑ improved" : "↓ worsened";
+    explanations.push(
+      `Useful feedback rate (boosted): ${pctStr(ufr.baselineValue)} → ${pctStr(ufr.currentValue)} (${dir} by ${pctStr(Math.abs(ufr.delta))}).`,
+    );
+  }
+
+  const nrp = noiseRateAmongPenalised;
+  if (Math.abs(nrp.delta) >= MEANINGFUL_SIGNAL_DELTA) {
+    const dir = nrp.delta > 0 ? "↑ improved" : "↓ worsened";
+    explanations.push(
+      `Noise rate (penalised): ${pctStr(nrp.baselineValue)} → ${pctStr(nrp.currentValue)} (${dir} by ${pctStr(Math.abs(nrp.delta))}).`,
+    );
+  }
+
+  const ir = investigateRateAmongPortfolioLinkedBoosted;
+  if (Math.abs(ir.delta) >= MEANINGFUL_SIGNAL_DELTA) {
+    const dir = ir.delta > 0 ? "↑ improved" : "↓ worsened";
+    explanations.push(
+      `Investigate rate (portfolio-linked, boosted): ${pctStr(ir.baselineValue)} → ${pctStr(ir.currentValue)} (${dir} by ${pctStr(Math.abs(ir.delta))}).`,
+    );
+  }
+
+  return explanations;
+}
+
+function pctStr(n: number): string {
+  return `${Math.round(n * 100)}%`;
 }
 
 // ─── main comparison function ─────────────────────────────────────────────────
@@ -159,21 +270,34 @@ export function compareSnapshots(
     ),
   };
 
-  const signalDirections = Object.values(signalDeltas).map((d) => d.direction);
-  const improved = signalDirections.filter((d) => d === "improved").length;
-  const worsened = signalDirections.filter((d) => d === "worsened").length;
-  const unchanged = signalDirections.filter((d) => d === "unchanged").length;
+  // Vote using MEANINGFUL_SIGNAL_DELTA threshold (stricter than display threshold)
+  const signalVotes = [
+    signalDirectionFor(signalDeltas.usefulFeedbackRateAmongBoosted.delta),
+    signalDirectionFor(signalDeltas.noiseRateAmongPenalised.delta),
+    signalDirectionFor(signalDeltas.investigateRateAmongPortfolioLinkedBoosted.delta),
+  ];
+
+  const improved = signalVotes.filter((v) => v === "improved").length;
+  const worsened = signalVotes.filter((v) => v === "worsened").length;
+  const unchanged = signalVotes.filter((v) => v === "unchanged").length;
 
   let overallAssessment: SnapshotComparison["overallAssessment"];
-  if (unchanged === signalDirections.length) {
+  if (unchanged === signalVotes.length) {
     overallAssessment = "unchanged";
+  } else if (improved >= SIGNAL_MAJORITY && worsened === 0) {
+    overallAssessment = "improved";
+  } else if (worsened >= SIGNAL_MAJORITY && improved === 0) {
+    overallAssessment = "worsened";
   } else if (improved > 0 && worsened === 0) {
+    // Minority improvement, no worsening → "improved" (e.g. 1-of-3 improved, 2 unchanged)
     overallAssessment = "improved";
   } else if (worsened > 0 && improved === 0) {
     overallAssessment = "worsened";
   } else {
     overallAssessment = "mixed";
   }
+
+  const explanations = buildExplanations(signalDeltas, overallAssessment);
 
   return {
     baselineModelVersion,
@@ -182,5 +306,6 @@ export function compareSnapshots(
     deltas,
     signalDeltas,
     overallAssessment,
+    explanations,
   };
 }
